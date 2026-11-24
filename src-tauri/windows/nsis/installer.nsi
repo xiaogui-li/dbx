@@ -40,7 +40,7 @@ ${StrLoc}
 !define VERSIONWITHBUILD "{{version_with_build}}"
 ; 自有构建的第 4 段构建号，必须与 crates/dbx-platform/src/version.rs 的
 ; SELF_BUILD_NUMBER 一致（由 scripts/check-self-build-version.mjs 校验）。
-!define SELF_BUILD_NUMBER "3"
+!define SELF_BUILD_NUMBER "4"
 !define SELF_DISPLAY_VERSION "${VERSION}.${SELF_BUILD_NUMBER}"
 !define HOMEPAGE "{{homepage}}"
 !define INSTALLMODE "{{install_mode}}"
