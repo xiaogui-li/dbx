@@ -99,10 +99,9 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkxNEYyMzE3QkJCNkM3REYKUldUZng3YTdGeU5Qa1NnTUZCRVhJVkxsOWZKQWFPVCtacUgySlNlcjRDU2RmZElCQnphd25pYUMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCNDM3QUFCQjE5MjJFNUQKUldSZExwS3hxM3BEMjRiMTU4SzhHY3MrRXVEeVowemJ6OUdISHFNckJwZ1FNdExRNGJXSE44RTQK",
       "endpoints": [
-        "https://dl.dbxio.com/releases/latest/latest.json",
-        "https://github.com/t8y2/dbx/releases/latest/download/latest.json"
+        "https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json"
       ]
     }
   }

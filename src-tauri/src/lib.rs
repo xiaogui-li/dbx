@@ -378,7 +378,8 @@ fn native_window_decorations_override(target_os: &str) -> Option<bool> {
 fn build_app_menu<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pkg_info = app_handle.package_info();
     let app_name = pkg_info.name.clone();
-    let build_version = pkg_info.version.to_string();
+    // 自有构建在原生 About 面板也显示 4 段版本号，与 Settings → About 保持一致。
+    let build_version = dbx_core::update::self_build_version(&pkg_info.version.to_string());
     // A promoted stable build keeps its beta version inside the binary; the
     // renderer reports the promotion so the panel can show the stable version
     // like Settings → About and the copied support info do.

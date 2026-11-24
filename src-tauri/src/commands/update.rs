@@ -17,17 +17,23 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterBuilder, UpdaterExt};
 
-const OFFICIAL_UPDATE_ENDPOINTS: [&str; 2] = [
-    "https://dl.dbxio.com/releases/stable/latest.json",
-    "https://github.com/t8y2/dbx/releases/latest/download/latest.json",
-];
-const BETA_UPDATE_ENDPOINTS: [&str; 1] = ["https://dl.dbxio.com/releases/beta/latest.json"];
+/// 自有构建发布仓库：dbx 自身的检查更新与安装包下载只认这里。
+///
+/// 插件市场 catalog、JDBC/驱动注册表、changelog 等下载源定义在各自模块，
+/// 与这里的常量相互独立，保持指向官方来源不变。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:53
+const SELF_RELEASE_REPO: &str = "xiaogui-li/dbx";
+const OFFICIAL_UPDATE_ENDPOINTS: [&str; 1] = ["https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json"];
+const BETA_UPDATE_ENDPOINTS: [&str; 1] = ["https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json"];
+// 仅用于回归断言：自有构建的候选 URL 不得再回退官方 CDN 的 latest 别名。
 #[cfg(test)]
 const R2_LATEST_RELEASE_DOWNLOAD_PREFIX: &str = "https://dl.dbxio.com/releases/latest/";
-const R2_STABLE_RELEASE_DOWNLOAD_PREFIX: &str = "https://dl.dbxio.com/releases/stable/latest/";
-const R2_BETA_RELEASE_DOWNLOAD_PREFIX: &str = "https://dl.dbxio.com/releases/beta/latest/";
-const CNB_RELEASE_DOWNLOAD_PREFIX: &str = "https://cnb.cool/dbxio.com/dbx/-/releases/download/";
-const GITHUB_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/t8y2/dbx/releases/download/";
+const R2_STABLE_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/xiaogui-li/dbx/releases/latest/download/";
+const R2_BETA_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/xiaogui-li/dbx/releases/latest/download/";
+const CNB_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/xiaogui-li/dbx/releases/download/";
+const GITHUB_RELEASE_DOWNLOAD_PREFIX: &str = "https://github.com/xiaogui-li/dbx/releases/download/";
 const UPDATE_DOWNLOAD_PROGRESS_EVENT: &str = "update-download-progress";
 const DOWNLOAD_CANCELED_ERROR: &str = "Download canceled by user.";
 const DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(15);
@@ -40,13 +46,23 @@ fn dbx_updater_builder(app: &AppHandle) -> UpdaterBuilder {
     app.updater_builder().on_before_exit(move || crate::cleanup_before_updater_forced_exit(&cleanup_app))
 }
 
+/// 为 updater 安装版本比较器，使自有 4 段版本号参与「是否有更新」判断。
+///
+/// Tauri 的 `current_version` 只有 3 段 semver，因此基准改用
+/// `dbx_core::update::self_build_version`；清单版本从 `RemoteRelease.version_raw`
+/// 读取原始 4 段字符串。若清单仍是官方 3 段格式（历史缓存），退化为前 3 段比较。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:54
 fn with_update_channel(builder: UpdaterBuilder, channel: UpdateChannel) -> UpdaterBuilder {
-    builder.version_comparator(move |current, update| {
-        // Tauri only hands us two version strings, so this cannot tell which
-        // build a promoted stable release ships. Hiding the already-installed
-        // artifact needs the manifest's `promoted_from`, so that lives in
-        // `build_update_info` (#15341); ranking stays purely by version here.
-        dbx_core::update::is_channel_update_available(channel, &update.version.to_string(), &current.to_string())
+    let current = dbx_core::update::self_build_version(env!("CARGO_PKG_VERSION"));
+    builder.version_comparator(move |_current, update| {
+        let baseline = if dbx_core::update::to_semver_compatible(&update.version_raw) == update.version_raw {
+            current.split('.').take(3).collect::<Vec<_>>().join(".")
+        } else {
+            current.clone()
+        };
+        dbx_core::update::is_channel_update_available(channel, &update.version_raw, &baseline)
     })
 }
 
@@ -501,10 +517,20 @@ fn tag_version(version: &str) -> String {
     }
 }
 
+/// 校验并规范化更新包对应的 Release tag，兼容自有 4 段版本号。
+///
+/// `semver::Version` 不接受 `a.b.c.d`，这里先经 `to_semver_compatible` 映射为
+/// build metadata 再解析；tag 本身保留原始 4 段形式（如 `v0.6.72.2`），
+/// 同时仍校验 tag 的前 3 段与待下载版本一致，防止错包。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:55
 fn release_tag_for_version(version: &Version, candidate: Option<String>) -> Result<String, String> {
-    let tag = candidate.unwrap_or_else(|| tag_version(&version.to_string()));
+    let display_version = dbx_core::update::from_semver_compatible(version);
+    let tag = candidate.unwrap_or_else(|| tag_version(&display_version));
     let normalized = tag.strip_prefix('v').unwrap_or(&tag);
-    let parsed = Version::parse(normalized).map_err(|_| "Invalid update release tag.".to_string())?;
+    let compatible = dbx_core::update::to_semver_compatible(normalized);
+    let parsed = Version::parse(&compatible).map_err(|_| "Invalid update release tag.".to_string())?;
     if (parsed.major, parsed.minor, parsed.patch) != (version.major, version.minor, version.patch) {
         return Err("Update release tag does not match the downloaded version.".into());
     }
@@ -521,8 +547,10 @@ pub async fn check_for_updates(
     let channel = channel.unwrap_or_default();
     let release =
         dbx_core::update::fetch_latest_release_for_channel(&locale, source.unwrap_or_default(), channel).await?;
-    let current_version = env!("CARGO_PKG_VERSION");
-    let mut info = dbx_core::update::build_update_info(release, current_version);
+    // 自有构建对外使用 4 段版本号，检查更新必须用它与自有 Release 的版本比较，
+    // 否则第三构建（0.6.72.2）与本机（0.6.72.1）在前 3 段上会被判为同一版本。
+    let current_version = dbx_core::update::self_build_version(env!("CARGO_PKG_VERSION"));
+    let mut info = dbx_core::update::build_update_info(release, &current_version);
     info.portable_mode = crate::data_dir::is_portable_mode();
     info.manual_update_only = requires_manual_update(IS_WINDOWS_7_TARGET);
     Ok(info)
@@ -708,10 +736,10 @@ pub async fn download_update(
             let notes = update.body.clone().unwrap_or_default();
             (ReadyUpdate::Installer { update: Box::new(update), bytes }, manifest, None, notes)
         };
-        let release_url = format!("https://github.com/t8y2/dbx/releases/tag/{release_tag}");
+        let release_url = format!("https://github.com/{SELF_RELEASE_REPO}/releases/tag/{release_tag}");
         let info = DownloadedUpdate {
             cache_id: uuid::Uuid::new_v4().to_string(),
-            version: version.to_string(),
+            version: dbx_core::update::from_semver_compatible(&version),
             portable_mode,
             release_url,
             release_notes: release_notes.unwrap_or(notes),
@@ -1157,7 +1185,7 @@ mod tests {
     use super::{
         requires_manual_update, tag_version, wait_for_download_step, wait_for_progressing_download,
         DownloadCancellation, PendingUpdateState, UpdateChannel, UpdateDownloadProgressGate, UpdateDownloadSource,
-        CNB_RELEASE_DOWNLOAD_PREFIX, DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX,
+        BETA_UPDATE_ENDPOINTS, CNB_RELEASE_DOWNLOAD_PREFIX, DOWNLOAD_CANCELED_ERROR, GITHUB_RELEASE_DOWNLOAD_PREFIX,
         OFFICIAL_UPDATE_ENDPOINTS, R2_BETA_RELEASE_DOWNLOAD_PREFIX, R2_LATEST_RELEASE_DOWNLOAD_PREFIX,
         R2_STABLE_RELEASE_DOWNLOAD_PREFIX,
     };
@@ -1200,6 +1228,18 @@ mod tests {
         );
         assert!(super::release_tag_for_version(&version, Some("v0.6.61-beta.20261028.1".into())).is_err());
         assert_eq!(super::release_tag_for_version(&version, None).unwrap(), "v0.6.60");
+    }
+
+    /// 验证自有 4 段版本对应的 Release tag 保留第 4 段。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:13
+    #[test]
+    fn self_build_release_tag_keeps_the_fourth_segment() {
+        let version = Version::parse("0.6.72+self.2").unwrap();
+        assert_eq!(super::release_tag_for_version(&version, None).unwrap(), "v0.6.72.2");
+        assert_eq!(super::release_tag_for_version(&version, Some("v0.6.72.2".into())).unwrap(), "v0.6.72.2");
+        assert!(super::release_tag_for_version(&version, Some("v0.6.73.1".into())).is_err());
     }
 
     #[test]
@@ -1355,21 +1395,38 @@ mod tests {
         );
     }
 
+    /// 自有构建只发布在自己的仓库，资产 URL 不应再被重写到任何第三方镜像。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:09
     #[test]
-    fn rewrites_github_asset_url_to_cnb() {
-        let download_url = UpdateDownloadSource::Cnb
-            .rewrite_download_url("https://github.com/t8y2/dbx/releases/download/v0.5.39/DBX_0.5.39_aarch64.dmg")
-            .unwrap()
-            .unwrap();
-        assert_eq!(download_url, "https://cnb.cool/dbxio.com/dbx/-/releases/download/v0.5.39/DBX_0.5.39_aarch64.dmg");
+    fn keeps_self_repository_asset_urls_untouched() {
+        let url = format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}v0.5.39/DBX_0.5.39_aarch64.dmg");
+        assert_eq!(UpdateDownloadSource::Cnb.rewrite_download_url(&url).unwrap(), None);
+        assert_eq!(UpdateDownloadSource::Official.rewrite_download_url(&url).unwrap(), None);
     }
 
+    /// 所有检查端点与资产候选都只属于自己的仓库，不再出现官方源。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:10
     #[test]
-    fn accepts_existing_cnb_asset_url() {
-        let download_url = UpdateDownloadSource::Cnb
-            .rewrite_download_url("https://cnb.cool/dbxio.com/dbx/-/releases/download/v0.5.39/DBX_0.5.39_aarch64.dmg")
-            .unwrap();
-        assert_eq!(download_url, None);
+    fn self_build_endpoints_never_reference_official_sources() {
+        for source in [UpdateDownloadSource::Official, UpdateDownloadSource::Cnb] {
+            for channel in [UpdateChannel::Stable, UpdateChannel::Beta] {
+                let endpoints = source.endpoints(Some("0.6.72.2"), channel).unwrap();
+                assert!(!endpoints.is_empty());
+                assert!(endpoints.iter().all(|url| url.contains("xiaogui-li/dbx")), "{endpoints:?}");
+                assert!(
+                    endpoints.iter().all(|url| !url.contains("t8y2/dbx") && !url.contains("dl.dbxio.com")),
+                    "{endpoints:?}"
+                );
+            }
+        }
+        assert!(OFFICIAL_UPDATE_ENDPOINTS[0].contains("xiaogui-li/dbx"));
+        assert!(BETA_UPDATE_ENDPOINTS[0].contains("xiaogui-li/dbx"));
+        assert!(GITHUB_RELEASE_DOWNLOAD_PREFIX.contains("xiaogui-li/dbx"));
+        assert!(CNB_RELEASE_DOWNLOAD_PREFIX.contains("xiaogui-li/dbx"));
     }
 
     #[test]
@@ -1411,30 +1468,32 @@ mod tests {
 
     #[test]
     fn builds_installer_asset_candidates_for_cnb_source() {
+        let download_url = format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}v0.5.64/DBX_0.5.64_aarch64.dmg");
         let candidates = UpdateDownloadSource::Cnb.installer_asset_candidates(
-            "https://github.com/t8y2/dbx/releases/download/v0.5.64/DBX_0.5.64_aarch64.dmg",
+            &download_url,
             Some("0.5.64"),
             UpdateChannel::Stable,
             None,
         );
         assert_eq!(candidates.len(), 3);
-        assert_eq!(candidates[0], "https://cnb.cool/dbxio.com/dbx/-/releases/download/v0.5.64/DBX_0.5.64_aarch64.dmg");
+        assert_eq!(candidates[0], format!("{CNB_RELEASE_DOWNLOAD_PREFIX}v0.5.64/DBX_0.5.64_aarch64.dmg"));
         assert_eq!(candidates[1], format!("{R2_STABLE_RELEASE_DOWNLOAD_PREFIX}DBX_0.5.64_aarch64.dmg"));
-        assert_eq!(candidates[2], "https://github.com/t8y2/dbx/releases/download/v0.5.64/DBX_0.5.64_aarch64.dmg");
+        assert_eq!(candidates[2], download_url);
     }
 
     #[test]
     fn builds_installer_asset_candidates_for_official_source() {
+        let download_url = format!("{GITHUB_RELEASE_DOWNLOAD_PREFIX}v0.5.64/DBX_0.5.64_aarch64.dmg");
         let candidates = UpdateDownloadSource::Official.installer_asset_candidates(
-            "https://github.com/t8y2/dbx/releases/download/v0.5.64/DBX_0.5.64_aarch64.dmg",
+            &download_url,
             Some("0.5.64"),
             UpdateChannel::Stable,
             None,
         );
         assert_eq!(candidates.len(), 2);
         assert_eq!(candidates[0], format!("{R2_STABLE_RELEASE_DOWNLOAD_PREFIX}DBX_0.5.64_aarch64.dmg"));
-        assert_eq!(candidates[1], "https://github.com/t8y2/dbx/releases/download/v0.5.64/DBX_0.5.64_aarch64.dmg");
-        assert!(!candidates.iter().any(|url| url.contains("cnb.cool")));
+        assert_eq!(candidates[1], download_url);
+        assert!(!candidates.iter().any(|url| url.contains("cnb.cool") || url.contains("t8y2/dbx")));
     }
 
     #[test]
@@ -1447,7 +1506,7 @@ mod tests {
         );
         assert_eq!(
             candidates[0],
-            "https://cnb.cool/dbxio.com/dbx/-/releases/download/v0.6.60-beta.20261028.1/DBX_0.6.60_x64-setup.exe"
+            format!("{CNB_RELEASE_DOWNLOAD_PREFIX}v0.6.60-beta.20261028.1/DBX_0.6.60_x64-setup.exe")
         );
         assert_eq!(candidates[1], format!("{R2_BETA_RELEASE_DOWNLOAD_PREFIX}DBX_0.6.60_x64-setup.exe"));
         assert_eq!(

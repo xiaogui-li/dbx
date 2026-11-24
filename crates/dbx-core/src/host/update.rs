@@ -1,14 +1,20 @@
-pub use dbx_platform::version::{base_version, is_newer_version, normalize_version, parse_version};
+pub use dbx_platform::version::{
+    base_version, from_semver_compatible, is_newer_version, normalize_version, parse_version, self_build_version,
+    to_semver_compatible, SELF_BUILD_NUMBER,
+};
 
 use serde::{Deserialize, Serialize};
 
-const LATEST_JSON_GITHUB_PATH: &str = "https://github.com/t8y2/dbx/releases/latest/download/latest.json";
-const LATEST_JSON_R2_PATH: &str = "releases/latest/latest.json";
-const LATEST_JSON_STABLE_R2_PATH: &str = "releases/stable/latest.json";
-const LATEST_JSON_BETA_R2_PATH: &str = "releases/beta/latest.json";
-const LATEST_JSON_CNB_PATH: &str = "https://cnb.cool/dbxio.com/dbx/-/releases/latest/download/latest.json";
-const LATEST_EN_NOTES_R2_PATH: &str = "changelog/latest-en.json";
-const GITHUB_RELEASE_API_PREFIX: &str = "https://api.github.com/repos/t8y2/dbx/releases/tags/v";
+/// 自有构建发布仓库：自建版本的「检查更新」与安装包下载只认这里。
+///
+/// 插件市场 catalog、JDBC/驱动注册表、changelog 数据等下载源定义在各自模块，
+/// 不经过本模块，保持指向官方来源不变。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:49
+const SELF_RELEASE_REPO: &str = "xiaogui-li/dbx";
+const LATEST_JSON_GITHUB_PATH: &str = "https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json";
+const GITHUB_RELEASE_API_PREFIX: &str = "https://api.github.com/repos/xiaogui-li/dbx/releases/tags/v";
 
 fn default_promoted() -> bool {
     true
@@ -33,8 +39,8 @@ pub struct TauriRelease {
     pub jdbc_plugin: Option<JdbcPluginLatest>,
     #[serde(skip)]
     pub github: Option<GithubReleaseMetadata>,
-    // 英文 release notes，由 R2 latest-en.json 填充（latest.json 不含此字段）。
-    // 仅当用户界面非中文时拉取，build_update_info 优先用它作为 release_notes。
+    // 英文 release notes，由自有 Release 的正文填充（latest.json 不含此字段）。
+    // 仅当用户界面非中文时填充，build_update_info 优先用它作为 release_notes。
     #[serde(skip)]
     pub notes_en: Option<String>,
 }
@@ -96,10 +102,11 @@ pub async fn fetch_latest_release_for_channel(
     if let Ok(github) = fetch_github_release_metadata(&client, &identity_version).await {
         release.github = Some(github);
     }
-    // 非中文界面用户额外拉取英文 release notes；失败/版本不匹配则保持 None，上层回退中文。
+    // 英文界面直接使用自有 Release 的正文作为 notes，不再请求官方 R2 上的 changelog 文件。
+    // 这样「检查更新」全程只访问自己的仓库，不会回落到官方发布源。
     if !is_chinese_locale(locale) {
-        if let Ok(notes_en) = fetch_latest_release_notes_en(&client, &identity_version).await {
-            release.notes_en = Some(notes_en);
+        if let Some(body) = release.github.as_ref().and_then(|metadata| metadata.body.clone()) {
+            release.notes_en = Some(body);
         }
     }
     Ok(release)
@@ -130,66 +137,21 @@ async fn fetch_first_available(client: &reqwest::Client, candidates: &[String]) 
     Err(format!("Failed to check updates: {}", errors.join("; ")))
 }
 
-fn update_check_candidates(source: crate::DownloadSource, channel: UpdateChannel) -> Vec<String> {
-    let r2_path = match channel {
-        UpdateChannel::Stable => LATEST_JSON_STABLE_R2_PATH,
-        UpdateChannel::Beta => LATEST_JSON_BETA_R2_PATH,
-    };
-    match source {
-        crate::DownloadSource::Official => {
-            if matches!(channel, UpdateChannel::Beta) {
-                vec![format!("{}{}", crate::R2_CDN_BASE, r2_path)]
-            } else {
-                vec![
-                    format!("{}{}", crate::R2_CDN_BASE, r2_path),
-                    format!("{}{LATEST_JSON_R2_PATH}", crate::R2_CDN_BASE),
-                    LATEST_JSON_GITHUB_PATH.to_string(),
-                ]
-            }
-        }
-        // CNB exposes a moving latest release, so checking CNB does not need an official-source version first.
-        crate::DownloadSource::Cnb => {
-            if matches!(channel, UpdateChannel::Beta) {
-                vec![format!("{}{}", crate::R2_CDN_BASE, r2_path)]
-            } else {
-                vec![
-                    format!("{}{}", crate::R2_CDN_BASE, r2_path),
-                    LATEST_JSON_CNB_PATH.to_string(),
-                    format!("{}{LATEST_JSON_R2_PATH}", crate::R2_CDN_BASE),
-                    LATEST_JSON_GITHUB_PATH.to_string(),
-                ]
-            }
-        }
-    }
-}
-
-// 拉取 R2 上的英文 release notes（仅最新版本）。version 必须与 latest.json 的 version 一致才采用，
-// 防止 sync-changelog 尚未更新时拿到旧版本英文 notes。
-async fn fetch_latest_release_notes_en(client: &reqwest::Client, expected_version: &str) -> Result<String, String> {
-    let url = format!("{}{LATEST_EN_NOTES_R2_PATH}", crate::R2_CDN_BASE);
-    let resp = client
-        .get(&url)
-        .header(reqwest::header::USER_AGENT, "dbx-update-checker")
-        .send()
-        .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|e| format!("Failed to fetch English release notes: {e}"))?;
-    let data: LatestEnNotes = resp.json().await.map_err(|e| format!("Failed to parse English release notes: {e}"))?;
-    if normalize_version(&data.version) == normalize_version(expected_version) {
-        Ok(data.notes)
-    } else {
-        Err(format!("English release notes version {} mismatch expected {}", data.version, expected_version))
-    }
+/// 返回自建版本的检查更新候选地址。
+///
+/// 自有构建只认自己仓库的 Release，不再把官方 R2 CDN 或 CNB 镜像列为候选，
+/// 避免「检查更新」先命中官方清单而展示官方版本号。下载源设置（official / cnb）
+/// 与渠道（stable / beta）在此统一收敛到同一份自有清单。
+/// 插件、驱动、catalog 等下载源不经过本函数，保持不变。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:50
+fn update_check_candidates(_source: crate::DownloadSource, _channel: UpdateChannel) -> Vec<String> {
+    vec![LATEST_JSON_GITHUB_PATH.to_string()]
 }
 
 fn is_chinese_locale(locale: &str) -> bool {
     locale == "zh-CN" || locale == "zh-TW"
-}
-
-#[derive(Debug, Deserialize)]
-struct LatestEnNotes {
-    version: String,
-    notes: String,
 }
 
 fn build_update_http_client() -> Result<reqwest::Client, String> {
@@ -241,7 +203,7 @@ pub fn build_update_info(release: TauriRelease, current_version: &str) -> Update
     let release_url = github
         .and_then(|metadata| non_empty(metadata.html_url.as_deref()))
         .map(ToOwned::to_owned)
-        .unwrap_or_else(|| format!("https://github.com/t8y2/dbx/releases/tag/{release_tag}"));
+        .unwrap_or_else(|| format!("https://github.com/{SELF_RELEASE_REPO}/releases/tag/{release_tag}"));
     UpdateInfo {
         update_available,
         portable_mode: false,
@@ -350,6 +312,29 @@ mod tests {
         build_update_info, normalize_version, release_identity_version, GithubReleaseMetadata, TauriRelease,
         UpdateChannel,
     };
+
+    /// 验证自建 4 段版本：检查更新只查自有仓库，且构建号递增时能正确判定为可更新。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:35:51
+    #[test]
+    fn self_build_update_check_uses_own_repository_and_four_part_versions() {
+        let candidates = super::update_check_candidates(crate::DownloadSource::Official, UpdateChannel::Stable);
+        assert_eq!(candidates, vec!["https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json"]);
+        assert!(!candidates.iter().any(|url| url.contains("t8y2/dbx") || url.contains("dl.dbxio.com")));
+
+        let release: TauriRelease = serde_json::from_str(
+            r#"{ "version": "0.6.72.2", "channel": "stable", "release_tag": "v0.6.72.2", "platforms": {} }"#,
+        )
+        .unwrap();
+        let info = build_update_info(release, "0.6.72.1");
+        assert!(info.update_available);
+        assert_eq!(info.latest_version, "0.6.72.2");
+        assert_eq!(info.release_url, "https://github.com/xiaogui-li/dbx/releases/tag/v0.6.72.2");
+
+        let same: TauriRelease = serde_json::from_str(r#"{ "version": "0.6.72.1", "platforms": {} }"#).unwrap();
+        assert!(!build_update_info(same, "0.6.72.1").update_available);
+    }
 
     #[test]
     fn parses_jdbc_plugin_metadata_from_latest_json() {
@@ -483,7 +468,7 @@ mod tests {
 
         let info = build_update_info(release, "0.6.59");
 
-        assert_eq!(info.release_url, "https://github.com/t8y2/dbx/releases/tag/v0.6.60-beta.20261028.1");
+        assert_eq!(info.release_url, "https://github.com/xiaogui-li/dbx/releases/tag/v0.6.60-beta.20261028.1");
     }
 
     #[test]
@@ -622,28 +607,17 @@ mod tests {
         assert!(!super::is_channel_update_available(UpdateChannel::Stable, "0.6.60", "0.6.60"));
     }
 
+    /// 自有构建的检查更新候选只指向自己的仓库，且与下载源/渠道选择无关。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:11
     #[test]
-    fn update_check_candidates_follow_selected_source() {
-        assert_eq!(
-            super::update_check_candidates(crate::DownloadSource::Official, UpdateChannel::Stable),
-            vec![
-                "https://dl.dbxio.com/releases/stable/latest.json",
-                "https://dl.dbxio.com/releases/latest/latest.json",
-                "https://github.com/t8y2/dbx/releases/latest/download/latest.json",
-            ]
-        );
-        assert_eq!(
-            super::update_check_candidates(crate::DownloadSource::Cnb, UpdateChannel::Stable),
-            vec![
-                "https://dl.dbxio.com/releases/stable/latest.json",
-                "https://cnb.cool/dbxio.com/dbx/-/releases/latest/download/latest.json",
-                "https://dl.dbxio.com/releases/latest/latest.json",
-                "https://github.com/t8y2/dbx/releases/latest/download/latest.json",
-            ]
-        );
-        assert_eq!(
-            super::update_check_candidates(crate::DownloadSource::Official, UpdateChannel::Beta)[0],
-            "https://dl.dbxio.com/releases/beta/latest.json"
-        );
+    fn update_check_candidates_always_use_the_self_build_repository() {
+        let expected = vec!["https://github.com/xiaogui-li/dbx/releases/latest/download/latest.json".to_string()];
+        for source in [crate::DownloadSource::Official, crate::DownloadSource::Cnb] {
+            for channel in [UpdateChannel::Stable, UpdateChannel::Beta] {
+                assert_eq!(super::update_check_candidates(source, channel), expected);
+            }
+        }
     }
 }

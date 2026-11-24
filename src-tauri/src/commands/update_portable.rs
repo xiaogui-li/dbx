@@ -43,19 +43,33 @@ pub(super) fn ensure_portable_version_is_newer(
     Ok(())
 }
 
+/// 判断便携版请求版本是否比当前版本更新，支持自有 4 段版本号。
+///
+/// 第 4 段以 semver build metadata 承载，直接比较两个 `Version` 会被 semver 忽略，
+/// 因此先还原成 4 段字符串，再交给 `is_channel_update_available` 逐段比较。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:56
 fn is_portable_upgrade(requested: &Version, current: &Version) -> bool {
+    let requested_text = dbx_core::update::from_semver_compatible(requested);
+    let current_text = dbx_core::update::from_semver_compatible(current);
     let channel = if requested.pre.is_empty() {
         dbx_core::update::UpdateChannel::Stable
     } else {
         dbx_core::update::UpdateChannel::Beta
     };
-    dbx_core::update::is_channel_update_available(channel, &requested.to_string(), &current.to_string())
+    dbx_core::update::is_channel_update_available(channel, &requested_text, &current_text)
 }
 
+/// 解析便携版版本：4 段版本先映射为合法 semver，官方 3 段 / beta 版本行为不变。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:57
 fn parse_portable_version(value: &str, label: &str) -> Result<Version, String> {
     let value = value.trim();
     let value = value.strip_prefix('v').unwrap_or(value);
-    Version::parse(value).map_err(|error| format!("Invalid {label} portable update version: {error}"))
+    let compatible = dbx_core::update::to_semver_compatible(value);
+    Version::parse(&compatible).map_err(|error| format!("Invalid {label} portable update version: {error}"))
 }
 
 fn portable_arch_label(arch: &str) -> Result<&'static str, String> {
@@ -66,12 +80,21 @@ fn portable_arch_label(arch: &str) -> Result<&'static str, String> {
     }
 }
 
+/// 生成便携版更新包资产名：自有构建保留 4 段版本号，避免不同构建号资产重名；
+/// 官方 beta 版本仍沿用前 3 段命名的既有约定。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:58
 pub(super) fn portable_asset_name(version: &str, arch: &str) -> Result<String, String> {
     let version = parse_portable_version(version, "requested")?;
     let arch = portable_arch_label(arch)?;
     // Release workflows keep asset filenames at the stable base version even
     // when the signed executable carries a beta prerelease version.
-    let base_version = format!("{}.{}.{}", version.major, version.minor, version.patch);
+    let base_version = if version.build.as_str().starts_with("self.") {
+        dbx_core::update::from_semver_compatible(&version)
+    } else {
+        format!("{}.{}.{}", version.major, version.minor, version.patch)
+    };
     Ok(format!("DBX_{base_version}_{arch}-portable.zip"))
 }
 
@@ -178,12 +201,21 @@ fn validated_portable_executable(
     Ok(executable)
 }
 
+/// 校验便携包清单版本与请求版本一致；带第 4 段构建号时必须连构建号一起匹配。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:59
 fn portable_versions_match(manifest_version: &Version, expected_version: &Version) -> bool {
-    manifest_version == expected_version
-        || (expected_version.pre.is_empty()
-            && manifest_version.major == expected_version.major
-            && manifest_version.minor == expected_version.minor
-            && manifest_version.patch == expected_version.patch)
+    if manifest_version == expected_version {
+        return true;
+    }
+    let same_base = manifest_version.major == expected_version.major
+        && manifest_version.minor == expected_version.minor
+        && manifest_version.patch == expected_version.patch;
+    if !expected_version.build.as_str().is_empty() {
+        return same_base && manifest_version.build == expected_version.build;
+    }
+    expected_version.pre.is_empty() && same_base
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -389,6 +421,19 @@ mod tests {
         zip.start_file(PORTABLE_EXECUTABLE_NAME, options).unwrap();
         zip.write_all(executable).unwrap();
         zip.finish().unwrap().into_inner()
+    }
+
+    /// 验证自有 4 段版本号可解析、可比较，且便携包资产名保留第 4 段。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:12
+    #[test]
+    fn parses_self_build_four_part_versions_for_portable_updates() {
+        assert_eq!(portable_asset_name("0.6.72.2", "x86_64").unwrap(), "DBX_0.6.72.2_x64-portable.zip");
+        let requested = super::parse_portable_version("0.6.72.2", "requested").unwrap();
+        let current = super::parse_portable_version("0.6.72.1", "current").unwrap();
+        assert!(super::is_portable_upgrade(&requested, &current));
+        assert!(!super::is_portable_upgrade(&current, &requested));
     }
 
     #[test]
