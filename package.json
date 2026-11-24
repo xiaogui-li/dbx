@@ -31,6 +31,7 @@
     "build": "node scripts/clean-desktop-dist.mjs && vite build --config apps/desktop/vite.config.ts",
     "build:docs-export": "vite build --config apps/desktop/vite.docs-export.config.ts",
     "build:checked": "pnpm typecheck && pnpm build",
+    "build:windows": "node scripts/build-self-build-windows.mjs",
     "check": "node scripts/run-check.mjs",
     "db:env": "node scripts/database-env.mjs",
     "test:db-env": "node --test scripts/database-env.test.mjs",
