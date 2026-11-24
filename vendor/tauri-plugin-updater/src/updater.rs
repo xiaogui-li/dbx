@@ -90,6 +90,14 @@ pub enum RemoteReleaseInner {
 pub struct RemoteRelease {
     /// Version to install.
     pub version: Version,
+    /// 清单中未加工的版本字符串，可能是自有构建的 4 段版本（如 `0.6.72.2`）。
+    ///
+    /// `semver::Version` 无法保留第 4 段，版本比较器需要使用这个原始串，
+    /// 否则自有构建之间无法判断新旧。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-23 20:36:00
+    pub version_raw: String,
     /// Release notes.
     pub notes: Option<String>,
     /// Release date.
@@ -514,7 +522,7 @@ impl Updater {
                 current_version: self.current_version.to_string(),
                 target: target.to_owned(),
                 extract_path: self.extract_path.clone(),
-                version: release.version.to_string(),
+                version: release.version_raw.clone(),
                 date: release.pub_date,
                 download_url: download_url.clone(),
                 signature: signature.to_owned(),
@@ -1291,8 +1299,8 @@ impl<'de> Deserialize<'de> for RemoteRelease {
     {
         #[derive(Deserialize)]
         struct InnerRemoteRelease {
-            #[serde(alias = "name", deserialize_with = "parse_version")]
-            version: Version,
+            #[serde(alias = "name")]
+            version: String,
             notes: Option<String>,
             pub_date: Option<String>,
             platforms: Option<HashMap<String, ReleaseManifestPlatform>>,
@@ -1312,8 +1320,14 @@ impl<'de> Deserialize<'de> for RemoteRelease {
             None
         };
 
+        // 自有构建使用 4 段版本号；semver 不收，映射成 build metadata 后仍可解析，
+        // 同时把原始串留给版本比较器与 Update.version 使用。
+        let version_raw = release.version.trim().trim_start_matches('v').to_string();
+        let version = parse_version_lenient(&version_raw).map_err(DeError::custom)?;
+
         Ok(RemoteRelease {
-            version: release.version,
+            version,
+            version_raw,
             notes: release.notes,
             pub_date,
             data: if let Some(platforms) = release.platforms {
@@ -1344,13 +1358,24 @@ fn installer_for_bundle_type(bundle: Option<BundleType>) -> Option<Installer> {
     }
 }
 
-fn parse_version<'de, D>(deserializer: D) -> std::result::Result<Version, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let str = String::deserialize(deserializer)?;
-
-    Version::from_str(str.trim_start_matches('v')).map_err(serde::de::Error::custom)
+/// 解析更新清单版本，兼容自有构建的 4 段版本号。
+///
+/// 标准 semver（含 beta 预发布）走原路径；`a.b.c.d` 映射为
+/// `a.b.c+self.d`，既保留第 4 段信息又不破坏 `Version` 类型约定。
+/// 原始 4 段字符串由 `RemoteRelease.version_raw` 单独保存。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:36:01
+fn parse_version_lenient(value: &str) -> std::result::Result<Version, String> {
+    if let Ok(version) = Version::from_str(value) {
+        return Ok(version);
+    }
+    let parts: Vec<&str> = value.split('.').collect();
+    if parts.len() == 4 && parts.iter().all(|part| part.parse::<u64>().is_ok()) {
+        return Version::from_str(&format!("{}.{}.{}+self.{}", parts[0], parts[1], parts[2], parts[3]))
+            .map_err(|error| error.to_string());
+    }
+    Err(format!("Invalid update version: {value}"))
 }
 
 // Validate signature

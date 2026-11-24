@@ -6,6 +6,60 @@ pub fn parse_version(version: &str) -> Vec<u64> {
     normalize_version(version).split(['.', '-', '+']).map(|part| part.parse::<u64>().unwrap_or(0)).collect()
 }
 
+/// 自建构建号：每次自行构建并发布到自有 Release 时递增（从 1 开始）。
+///
+/// 前 3 段与上游官方版本保持一致，第 4 段用于区分自有构建，
+/// 使自有构建之间也能通过「检查更新」正确排序。
+///
+/// @author xiaogui
+/// @since 2026-11-24 10:23:41
+pub const SELF_BUILD_NUMBER: u32 = 2;
+
+/// 生成自建 4 段版本号：取传入版本的前 3 段，追加 [`SELF_BUILD_NUMBER`] 作为第 4 段。
+///
+/// 对已经是 4 段的输入保持幂等（始终返回当前构建号），避免重复拼接导致版本串变形。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:46
+pub fn self_build_version(version: &str) -> String {
+    let base = base_version(&normalize_version(version));
+    let mut parts = base.splitn(4, '.');
+    let major = parts.next().unwrap_or("0");
+    let minor = parts.next().unwrap_or("0");
+    let patch = parts.next().unwrap_or("0");
+    format!("{major}.{minor}.{patch}.{SELF_BUILD_NUMBER}")
+}
+
+/// 把 4 段数字版本（如 `0.6.72.2`）映射成合法 semver（`0.6.72+self.2`）。
+///
+/// Cargo / Tauri / `semver::Version` 均强制 3 段，便携版更新与 updater 清单解析
+/// 仍需要 `semver::Version`；build metadata 可无损承载第 4 段且不影响原有 3 段语义。
+/// 非 4 段输入原样返回。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:47
+pub fn to_semver_compatible(version: &str) -> String {
+    let normalized = normalize_version(version);
+    let parts: Vec<&str> = normalized.split('.').collect();
+    if parts.len() == 4 && parts.iter().all(|part| part.parse::<u64>().is_ok()) {
+        return format!("{}.{}.{}+self.{}", parts[0], parts[1], parts[2], parts[3]);
+    }
+    normalized
+}
+
+/// 从 [`to_semver_compatible`] 产生的 semver 还原自建 4 段版本字符串。
+///
+/// 普通 semver 版本（含官方 beta 预发布）原样返回其字符串形式。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:35:48
+pub fn from_semver_compatible(version: &semver::Version) -> String {
+    if let Some(build) = version.build.as_str().strip_prefix("self.") {
+        return format!("{}.{}.{}.{}", version.major, version.minor, version.patch, build);
+    }
+    version.to_string()
+}
+
 pub fn base_version(version: &str) -> String {
     normalize_version(version).split(['-', '+']).next().unwrap_or_default().to_string()
 }
@@ -63,6 +117,23 @@ pub fn is_newer_version(latest: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 验证自建 4 段版本号的生成、semver 兼容映射与逐段比较。
+    ///
+    /// @author xiaogui
+    /// @since 2026-11-24 10:23:42
+    #[test]
+    fn builds_and_compares_self_build_versions() {
+        assert_eq!(self_build_version("0.6.72"), "0.6.72.2");
+        assert_eq!(self_build_version("v0.6.72-beta.20261122.1"), "0.6.72.2");
+        assert_eq!(self_build_version("0.6.72.7"), "0.6.72.2");
+        assert_eq!(to_semver_compatible("0.6.72.2"), "0.6.72+self.2");
+        assert_eq!(to_semver_compatible("0.6.72"), "0.6.72");
+        assert_eq!(from_semver_compatible(&semver::Version::parse("0.6.72+self.2").unwrap()), "0.6.72.2");
+        assert!(is_newer_version("0.6.72.2", "0.6.72.1"));
+        assert!(!is_newer_version("0.6.72.1", "0.6.72.2"));
+        assert!(!is_newer_version("0.6.72.1", "0.6.72.1"));
+    }
 
     #[test]
     fn normalizes_tag_versions() {

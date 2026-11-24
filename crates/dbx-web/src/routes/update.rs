@@ -9,8 +9,15 @@ use dbx_core::{changelog, update};
 use crate::error::AppError;
 use crate::state::WebState;
 
+/// 返回 Web 模式的应用版本；自有构建统一显示 4 段版本号。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:36:03
 pub async fn get_version(State(state): State<Arc<WebState>>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "demoMode": state.demo_mode }))
+    Json(serde_json::json!({
+        "version": dbx_core::update::self_build_version(env!("CARGO_PKG_VERSION")),
+        "demoMode": state.demo_mode
+    }))
 }
 
 #[derive(serde::Deserialize)]
@@ -32,7 +39,8 @@ pub async fn check_for_updates(Query(params): Query<UpdateCheckParams>) -> Resul
     )
     .await
     .map_err(AppError::from)?;
-    let info = update::build_update_info(release, env!("CARGO_PKG_VERSION"));
+    let current_version = dbx_core::update::self_build_version(env!("CARGO_PKG_VERSION"));
+    let info = update::build_update_info(release, &current_version);
     Ok(Json(serde_json::to_value(info).map_err(|e| AppError::from(e.to_string()))?))
 }
 

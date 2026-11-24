@@ -1,4 +1,5 @@
 import { readSnippetRemoteContentHash } from "@/lib/cloudSync/snippetAutoUploadConfig";
+import { formatSelfBuildVersion } from "@/lib/app/selfBuildVersion";
 import type { MongoDeleteId } from "@/lib/mongo/mongoDocumentValues";
 import type { StarRocksAlterOptions } from "@/lib/table/starrocksAlterOptions";
 import type { AppThemeMode } from "@/lib/app/appTheme";
@@ -3832,9 +3833,15 @@ export async function relaunchApp(): Promise<void> {
   return invoke("relaunch_app");
 }
 
+/**
+ * 返回应用版本号；自有构建补上第 4 段构建号，与后端的检查更新基准保持一致。
+ *
+ * @author xiaogui
+ * @since 2026-11-23 20:36:06
+ */
 export async function getAppVersion(): Promise<string> {
   const { getVersion } = await import("@tauri-apps/api/app");
-  return getVersion();
+  return formatSelfBuildVersion(await getVersion());
 }
 
 export async function getAppSupportInfo(): Promise<AppSupportInfo> {

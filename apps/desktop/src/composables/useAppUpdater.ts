@@ -27,6 +27,8 @@ export function canDownloadAndInstallUpdate(info: api.UpdateInfo | null, isDeskt
 
 interface ParsedUpdateVersion {
   core: [string, string, string];
+  /** 自有构建的第 4 段构建号；官方 3 段版本为 null。 */
+  build: string | null;
   prerelease: string[];
 }
 
@@ -34,12 +36,22 @@ function normalizeUpdateVersion(version: string): string {
   return version.trim().replace(/^[vV]/, "");
 }
 
+/**
+ * 解析版本串，兼容自有构建的 4 段版本号（如 0.6.72.2）。
+ *
+ * 第 4 段单独保存，供忽略版本、缓存是否过期等比较逻辑使用；
+ * 官方 3 段与 beta 预发布版本的解析结果保持不变。
+ *
+ * @author xiaogui
+ * @since 2026-11-23 20:36:07
+ */
 function parseUpdateVersion(version: string): ParsedUpdateVersion | null {
-  const match = normalizeUpdateVersion(version).match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/);
+  const match = normalizeUpdateVersion(version).match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/);
   if (!match) return null;
   return {
     core: [match[1], match[2], match[3]],
-    prerelease: match[4]?.split(".") ?? [],
+    build: match[4] ?? null,
+    prerelease: match[5]?.split(".") ?? [],
   };
 }
 
@@ -53,6 +65,9 @@ function compareParsedUpdateVersions(left: ParsedUpdateVersion, right: ParsedUpd
     const comparison = compareNumericVersionIdentifier(left.core[index], right.core[index]);
     if (comparison !== 0) return comparison;
   }
+  // 自有构建的第 4 段：缺失按 0 处理，确保 0.6.72.2 排在 0.6.72.1 之后。
+  const buildComparison = compareNumericVersionIdentifier(left.build ?? "0", right.build ?? "0");
+  if (buildComparison !== 0) return buildComparison;
   if (!left.prerelease.length || !right.prerelease.length) {
     if (left.prerelease.length === right.prerelease.length) return 0;
     return left.prerelease.length ? -1 : 1;
@@ -133,27 +148,24 @@ export function tagVersion(version: string): string {
 }
 
 export function resolveUpdateReleaseUrl(info: api.UpdateInfo | null, source: unknown, fallbackUrl: string): string {
-  // Beta releases are mirrored to CNB only after promotion to stable.
+  // 自有构建只发布到自己仓库的 Release；下载源设置不再改变目标仓库。
   if (info?.channel === "beta") return info.release_url || fallbackUrl;
   const normalizedSource = normalizeUpdateDownloadSource(source);
   if (normalizedSource === "cnb" && (info?.release_tag || info?.latest_version)) {
     const tag = info.release_tag ?? tagVersion(info.latest_version);
-    return `https://cnb.cool/dbxio.com/dbx/-/releases/tag/${encodeURIComponent(tag)}`;
+    return `https://github.com/xiaogui-li/dbx/releases/tag/${encodeURIComponent(tag)}`;
   }
-  if (normalizedSource === "cnb") return "https://cnb.cool/dbxio.com/dbx/-/releases";
+  if (normalizedSource === "cnb") return "https://github.com/xiaogui-li/dbx/releases";
   return info?.release_url || fallbackUrl;
 }
 
 /**
- * 按版本 tag 解析“下载页”地址：CNB 源指向 CNB 的 release 页，其余指向 GitHub release 页。
+ * 按版本 tag 解析“下载页”地址：自有构建一律指向自己仓库的 release 页。
  * 用于历史版本回退：只做跳转，不在应用内下载/安装旧版本。
  */
-export function resolveReleaseTagUrl(tag: string, source: unknown): string {
+export function resolveReleaseTagUrl(tag: string, _source: unknown): string {
   const normalizedTag = tagVersion(tag);
-  if (normalizeUpdateDownloadSource(source) === "cnb") {
-    return `https://cnb.cool/dbxio.com/dbx/-/releases/tag/${encodeURIComponent(normalizedTag)}`;
-  }
-  return `https://github.com/t8y2/dbx/releases/tag/${encodeURIComponent(normalizedTag)}`;
+  return `https://github.com/xiaogui-li/dbx/releases/tag/${encodeURIComponent(normalizedTag)}`;
 }
 
 export async function resolveUpdaterProxy(): Promise<string | undefined> {
@@ -204,7 +216,7 @@ export function useAppUpdater(options: UseAppUpdaterOptions = {}) {
   // `isUpdateIgnored` is only a version comparison, so it also matches once the user
   // has upgraded past the ignored version; require a release that is actually on offer.
   const ignoredReleaseVersion = computed(() => (updateDownloaded.value || updateReady.value || updateInfo.value?.update_available !== true || !isUpdateIgnored(updateInfo.value, settingsStore.editorSettings.ignoredUpdateVersion) ? "" : (settingsStore.editorSettings.ignoredUpdateVersion ?? "")));
-  const latestReleaseUrl = "https://github.com/t8y2/dbx/releases/latest";
+  const latestReleaseUrl = "https://github.com/xiaogui-li/dbx/releases/latest";
   let generation = 0;
   let activeDownload: Promise<void> | undefined;
   let automaticDownload = false;

@@ -3,6 +3,7 @@ import { createApp, defineComponent, h, reactive, nextTick, type App } from "vue
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { effectiveUpdateInfo, isNewerRemoteVersion, isPreparedUpdateObsolete, resolveReleaseTagUrl, resolveUpdateReleaseUrl, useAppUpdater } from "@/composables/useAppUpdater";
+import { formatSelfBuildVersion, SELF_BUILD_NUMBER } from "@/lib/app/selfBuildVersion";
 import { displayAppVersion } from "@/lib/app/promotedBuild";
 const mocks = vi.hoisted(() => ({
   checkForUpdates: vi.fn(),
@@ -75,23 +76,44 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
 });
+describe("self-build four-part versions", () => {
+  it("appends the self build number to the upstream three-segment version", () => {
+    expect(formatSelfBuildVersion("0.6.72")).toBe(`0.6.72.${SELF_BUILD_NUMBER}`);
+    expect(formatSelfBuildVersion("v0.6.72-beta.20261122.1")).toBe(`0.6.72.${SELF_BUILD_NUMBER}`);
+    expect(formatSelfBuildVersion("0.6.72.9")).toBe(`0.6.72.${SELF_BUILD_NUMBER}`);
+  });
+
+  it("ranks the fourth build number when the first three segments match", () => {
+    expect(isNewerRemoteVersion("0.6.72.2", "0.6.72.1")).toBe(true);
+    expect(isNewerRemoteVersion("0.6.72.1", "0.6.72.2")).toBe(false);
+    expect(isNewerRemoteVersion("0.6.72.1", "0.6.72.1")).toBe(false);
+    expect(isNewerRemoteVersion("0.6.73", "0.6.72.9")).toBe(true);
+    expect(isNewerRemoteVersion("0.6.72.1", "0.6.72")).toBe(true);
+  });
+
+  it("does not treat an older self build as a usable prepared package", () => {
+    expect(isPreparedUpdateObsolete("0.6.72.1", "0.6.72.2")).toBe(true);
+    expect(isPreparedUpdateObsolete("0.6.72.2", "0.6.72.1")).toBe(false);
+  });
+});
+
 describe("older version release pages", () => {
-  it("opens the GitHub beta release before it has been mirrored to CNB", () => {
-    const releaseUrl = "https://github.com/t8y2/dbx/releases/tag/v1.1.0-beta.20261028.1";
+  it("opens the own beta release page directly", () => {
+    const releaseUrl = "https://github.com/xiaogui-li/dbx/releases/tag/v1.1.0-beta.20261028.1";
     expect(resolveUpdateReleaseUrl({ ...info, channel: "beta", release_tag: "v1.1.0-beta.20261028.1", release_url: releaseUrl }, "cnb", "fallback")).toBe(releaseUrl);
   });
 
-  it("uses the original beta tag on CNB after promotion to stable", () => {
-    expect(resolveUpdateReleaseUrl({ ...info, channel: "stable", release_tag: "v1.1.0-beta.20261028.1" }, "cnb", "fallback")).toBe("https://cnb.cool/dbxio.com/dbx/-/releases/tag/v1.1.0-beta.20261028.1");
+  it("uses the original beta tag on the own repository after promotion to stable", () => {
+    expect(resolveUpdateReleaseUrl({ ...info, channel: "stable", release_tag: "v1.1.0-beta.20261028.1" }, "cnb", "fallback")).toBe("https://github.com/xiaogui-li/dbx/releases/tag/v1.1.0-beta.20261028.1");
   });
 
-  it("maps a historical version to the matching GitHub release page", () => {
-    expect(resolveReleaseTagUrl("0.5.59", "official")).toBe("https://github.com/t8y2/dbx/releases/tag/v0.5.59");
-    expect(resolveReleaseTagUrl("v0.5.59", "official")).toBe("https://github.com/t8y2/dbx/releases/tag/v0.5.59");
+  it("maps a historical version to the matching own repository release page", () => {
+    expect(resolveReleaseTagUrl("0.5.59", "official")).toBe("https://github.com/xiaogui-li/dbx/releases/tag/v0.5.59");
+    expect(resolveReleaseTagUrl("v0.5.59", "official")).toBe("https://github.com/xiaogui-li/dbx/releases/tag/v0.5.59");
   });
 
-  it("uses the CNB release page when the CNB download source is selected", () => {
-    expect(resolveReleaseTagUrl("v0.5.59", "cnb")).toBe("https://cnb.cool/dbxio.com/dbx/-/releases/tag/v0.5.59");
+  it("keeps pointing at the own repository for every download source", () => {
+    expect(resolveReleaseTagUrl("v0.5.59", "cnb")).toBe("https://github.com/xiaogui-li/dbx/releases/tag/v0.5.59");
   });
 
   it("passes the beta release tag through to the download cache", async () => {

@@ -38,6 +38,10 @@ ${StrLoc}
 !define PRODUCTNAME "{{product_name}}"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
+; 自有构建的第 4 段构建号，必须与 crates/dbx-platform/src/version.rs 的
+; SELF_BUILD_NUMBER 一致（由 scripts/check-self-build-version.mjs 校验）。
+!define SELF_BUILD_NUMBER "2"
+!define SELF_DISPLAY_VERSION "${VERSION}.${SELF_BUILD_NUMBER}"
 !define HOMEPAGE "{{homepage}}"
 !define INSTALLMODE "{{install_mode}}"
 !define LICENSE "{{license}}"
@@ -127,12 +131,12 @@ OutFile "${OUTFILE}"
 !define PLACEHOLDER_INSTALL_DIR "placeholder\${PRODUCTNAME}"
 InstallDir "${PLACEHOLDER_INSTALL_DIR}"
 
-VIProductVersion "${VERSIONWITHBUILD}"
+VIProductVersion "${SELF_DISPLAY_VERSION}"
 VIAddVersionKey "ProductName" "${PRODUCTNAME}"
 VIAddVersionKey "FileDescription" "${PRODUCTNAME}"
 VIAddVersionKey "LegalCopyright" "${COPYRIGHT}"
-VIAddVersionKey "FileVersion" "${VERSION}"
-VIAddVersionKey "ProductVersion" "${VERSION}"
+VIAddVersionKey "FileVersion" "${SELF_DISPLAY_VERSION}"
+VIAddVersionKey "ProductVersion" "${SELF_DISPLAY_VERSION}"
 
 # additional plugins
 !addplugindir "${ADDITIONALPLUGINSPATH}"

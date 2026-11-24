@@ -15,9 +15,16 @@ pub async fn get_app_support_info() -> AppSupportInfo {
     current_app_support_info()
 }
 
+/// 组装 Settings → About 展示的应用支持信息。
+///
+/// 自有构建对外显示 4 段版本号（前 3 段对齐上游、第 4 段为自建构建号），
+/// 与「检查更新」使用的当前版本保持一致。
+///
+/// @author xiaogui
+/// @since 2026-11-23 20:36:02
 pub(crate) fn current_app_support_info() -> AppSupportInfo {
     AppSupportInfo {
-        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        app_version: dbx_core::update::self_build_version(env!("CARGO_PKG_VERSION")),
         runtime: "desktop",
         os_name: os_name(),
         os_version: os_version(),
