@@ -6,9 +6,9 @@
  * 由 scripts/check-self-build-version.mjs 在测试阶段校验。
  *
  * @author xiaogui
- * @since 2026-11-24 10:23:43
+ * @since 2026-11-24 15:09:44
  */
-export const SELF_BUILD_NUMBER = 2;
+export const SELF_BUILD_NUMBER = 3;
 
 /**
  * 把上游 3 段版本格式化为自建 4 段版本；已是 4 段时替换为当前构建号。
