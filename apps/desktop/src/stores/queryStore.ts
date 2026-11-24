@@ -2007,6 +2007,25 @@ export const useQueryStore = defineStore("query", () => {
     }
   }
 
+  /**
+   * 清空查询结果的展示元数据（字段注释、类型标签、来源映射、可编辑性分析等），但保留结果数据本身。
+   * 用于在发布一条新的逻辑结果时切断上一次查询遗留的表头字段注释；分页追加属于同一逻辑结果，不应调用。
+   * 仅适用于 query 模式：data 模式不会触发后台元数据回填，清空后无法恢复。
+   * @author xiaogui
+   * @since 2026-11-23 18:13:24
+   */
+  function clearQueryDisplayMetadata(tab: QueryTab) {
+    tab.queryAnalysis = undefined;
+    tab.querySourceColumns = undefined;
+    tab.queryWriteTargets = undefined;
+    tab.resultColumnComments = undefined;
+    tab.resultColumnTypeLabels = undefined;
+    tab.queryDisplaySourceColumns = undefined;
+    tab.queryEditabilityReason = undefined;
+    tab.mongoEditTarget = undefined;
+    if (tab.mode !== "data") tab.tableMeta = undefined;
+  }
+
   function clearResultPayload(tab: QueryTab, options: { evicted?: boolean; preserveCacheSnapshot?: boolean } = {}) {
     if (!tab.isExecuting) tab.liveQueryMessages = undefined;
     tab.result = undefined;
@@ -7574,10 +7593,15 @@ export const useQueryStore = defineStore("query", () => {
     return databaseType !== "oracle" || !isViewTableType(loaded.tableMeta.tableType);
   }
 
+  /**
+   * 应用后台分析产生的展示元数据；字段为 undefined 表示本次没有取到元数据，必须写入以切断上一次查询的残留值。
+   * @author xiaogui
+   * @since 2026-11-23 18:16:05
+   */
   function applyQueryDisplayMetadata(tab: QueryTab, display: QueryDisplayMetadataReady) {
-    if (display.resultColumnComments !== undefined) tab.resultColumnComments = display.resultColumnComments;
-    if (display.resultColumnTypeLabels !== undefined) tab.resultColumnTypeLabels = display.resultColumnTypeLabels;
-    if (display.queryDisplaySourceColumns !== undefined) tab.queryDisplaySourceColumns = display.queryDisplaySourceColumns;
+    tab.resultColumnComments = display.resultColumnComments;
+    tab.resultColumnTypeLabels = display.resultColumnTypeLabels;
+    tab.queryDisplaySourceColumns = display.queryDisplaySourceColumns;
   }
 
   function applyQueryMetadataPatch(tab: QueryTab, patch: QueryMetadataPatch, databaseType?: DatabaseType, database?: string) {
@@ -8373,6 +8397,11 @@ export const useQueryStore = defineStore("query", () => {
 
   const pendingQueryMetadata = new WeakMap<QueryResult, Promise<QueryMetadataPatch | undefined>>();
 
+  /**
+   * 在结果发布后异步解析可编辑性与字段注释；分析失败或未产出 patch 时，清空当前结果上一次查询遗留的展示元数据。
+   * @author xiaogui
+   * @since 2026-11-23 18:16:27
+   */
   function analyzeQueryMetadataInBackground(tabId: string, sql: string, result: QueryResult, executionDatabase: string, traceId: string, elapsed: () => string, databaseType: DatabaseType | undefined, hiddenPrimaryKeys: HiddenPrimaryKeyProjection[] = [], connection?: ConnectionConfig) {
     void (async () => {
       const tab = tabs.value.find((t) => t.id === tabId);
@@ -8400,9 +8429,17 @@ export const useQueryStore = defineStore("query", () => {
           if (activeResultRunOwnsDisplayedResult(current)) syncActiveResultRunFromDisplayed(current);
           queryExecutionLog("info", "metadata:done", { traceId, elapsed: elapsed() });
         } else {
+          // No patch was produced while this result is still displayed: make the
+          // absence of metadata explicit instead of keeping the previous query's
+          // header comments. A stale result belongs to another query and is kept.
+          if (!patch && current?.result === result && current.mode === "query") clearQueryDisplayMetadata(current);
           queryExecutionLog("warn", "metadata:stale", { traceId, elapsed: elapsed() });
         }
       } catch (error) {
+        // A failed background analysis must not leave the previous result's header
+        // comments on screen; only clear while this result is still the live one.
+        const current = tabs.value.find((t) => t.id === tabId);
+        if (current?.result === result && current.mode === "query") clearQueryDisplayMetadata(current);
         queryExecutionLog("warn", "metadata:failed", { traceId, elapsed: elapsed(), error });
       } finally {
         if (pendingQueryMetadata.get(result) === pending) pendingQueryMetadata.delete(result);
@@ -8593,6 +8630,11 @@ export const useQueryStore = defineStore("query", () => {
     }
   }
 
+  /**
+   * 执行指定查询页签的 SQL 并发布结果；发布新的逻辑结果时清空上一次查询的展示元数据，避免表头字段注释残留。
+   * @author xiaogui
+   * @since 2026-11-23 18:14:50
+   */
   async function executeTabSql(
     id: string,
     sql: string,
@@ -10215,6 +10257,11 @@ export const useQueryStore = defineStore("query", () => {
           current.activeResultIndex = undefined;
           current.result = results[0];
         }
+        // A newly published logical result must not inherit the previous result's
+        // header comments. Appended pages belong to the same logical result, and
+        // data-mode tabs never run the background metadata enrichment that would
+        // restore these fields, so both are excluded.
+        if (current.mode === "query" && !shouldAppendResult) clearQueryDisplayMetadata(current);
         if (!captureResultRun && previousDisplayedResults.some(Boolean)) {
           releaseReplacedResultLargeValues(current, ...previousDisplayedResults);
         }

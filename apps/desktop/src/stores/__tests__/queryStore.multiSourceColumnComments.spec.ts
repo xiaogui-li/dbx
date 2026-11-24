@@ -551,6 +551,38 @@ describe("queryStore multi-source result column comments", () => {
     expect(tab.resultColumnComments).toEqual([undefined, undefined]);
   });
 
+  it("does not keep the previous query's column comments when the next query has no metadata", async () => {
+    const { useQueryStore } = await import("@/stores/queryStore");
+    const store = useQueryStore();
+    const tabId = store.createTab("mysql-1", "app", "Query");
+
+    await store.executeTabSql(tabId, "SELECT a.id, a.user_id, b.id, b.name FROM orders a JOIN users b ON a.user_id = b.id");
+    const tab = store.tabs.find((item) => item.id === tabId)!;
+    await vi.waitFor(() => expect(tab.resultColumnComments).toEqual(["订单ID", "下单用户", "用户ID", "用户名"]));
+
+    // 第二次查询的元数据分析失败：后台不会产出 patch，旧注释必须在新结果发布时就被清掉。
+    analyzeEditableQueryEditability.mockRejectedValueOnce(new Error("metadata unavailable"));
+    executeMulti.mockResolvedValueOnce([
+      {
+        columns: ["total"],
+        rows: [[42]],
+        affected_rows: 0,
+        execution_time_ms: 1,
+      },
+    ]);
+
+    await store.executeTabSql(tabId, "SELECT COUNT(*) AS total FROM orders");
+
+    expect(tab.result?.columns).toEqual(["total"]);
+    expect(tab.resultColumnComments).toBeUndefined();
+    expect(tab.tableMeta).toBeUndefined();
+
+    // 等后台分析确实失败并走完兜底分支，确认它不会把旧注释写回来。
+    await vi.waitFor(() => expect(analyzeEditableQueryEditability).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(tab.resultColumnComments).toBeUndefined());
+    expect(tab.tableMeta).toBeUndefined();
+  });
+
   it("resolves an aggregate label back to its single base column for display comments", async () => {
     analyzeEditableQueryEditability.mockResolvedValue({ editable: false, reason: "aggregation" });
     executeMulti.mockResolvedValue([
