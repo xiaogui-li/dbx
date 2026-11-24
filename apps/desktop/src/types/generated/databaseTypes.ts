@@ -45,6 +45,7 @@ export const DATABASE_TYPES = [
   "exasol",
   "opengauss",
   "questdb",
+  "oushudb",
   "oceanbase-oracle",
   "gbase",
   "gbase8s",

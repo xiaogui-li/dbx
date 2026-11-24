@@ -18,6 +18,10 @@ type CreationConnection = (Pick<ConnectionConfig, "db_type" | "driver_profile" |
 export const DATABASE_NAMESPACE_CREATION_MATRIX = {
   mysql: { connection: "database" },
   postgres: { connection: "database", database: "schema" },
+  // OushuDB（偶数数据库）为 PostgreSQL 兼容方言，建库/建 schema 行为与 postgres 一致。
+  // @author xiaogui
+  // @since 2026-11-24 13:43:10
+  oushudb: { connection: "database", database: "schema" },
   sqlite: { connection: "attach" },
   rqlite: { deferred: "single SQLite-compatible database per node" },
   turso: { deferred: "remote libSQL database lifecycle is provider-managed" },

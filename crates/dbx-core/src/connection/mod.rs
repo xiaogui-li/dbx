@@ -4249,7 +4249,11 @@ impl AppState {
                 let jdbc_config = prestosql_jdbc_config_for_endpoint(&db_config, &host, port)?;
                 self.external_driver_pool("jdbc", &jdbc_config).await?
             }
-            DatabaseType::Jdbc => {
+            // OushuDB（偶数数据库）与通用 JDBC 共用外部驱动通道：由用户提供的
+            // 厂商 jar 与 jdbc:oushudb:// 连接串驱动。
+            // @author xiaogui
+            // @since 2026-11-24 13:48:39
+            DatabaseType::Jdbc | DatabaseType::Oushudb => {
                 let mut jdbc_config = db_config.clone();
                 if host != config.host || port != config.port {
                     if let Some(ref url) = jdbc_config.connection_string {
@@ -4779,7 +4783,10 @@ impl AppState {
             });
         }
 
-        if config.db_type == DatabaseType::Jdbc {
+        // OushuDB（偶数数据库）同样携带 jdbc: 连接串，纳入传输 URL 校验。
+        // @author xiaogui
+        // @since 2026-11-24 13:48:39
+        if config.db_type == DatabaseType::Jdbc || config.db_type == DatabaseType::Oushudb {
             if let Some(url) = config.connection_string.as_deref().filter(|url| !url.is_empty()) {
                 validate_jdbc_transport_url(url)?;
             }
@@ -8386,7 +8393,11 @@ fn connection_remote_endpoint(config: &ConnectionConfig) -> (String, u16) {
             .filter(|s| !s.is_empty())
             .and_then(parse_mongo_first_host)
             .unwrap_or_else(|| (config.host.clone(), config.port))
-    } else if config.db_type == DatabaseType::Jdbc {
+    } else if config.db_type == DatabaseType::Jdbc || config.db_type == DatabaseType::Oushudb {
+        // OushuDB（偶数数据库）与通用 JDBC 均从 connection_string 解析远端端点，
+        // 保证 SSH 隧道/代理路由使用连接串里的真实主机与端口。
+        // @author xiaogui
+        // @since 2026-11-24 13:48:39
         config
             .connection_string
             .as_deref()

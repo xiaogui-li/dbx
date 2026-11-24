@@ -287,6 +287,13 @@ const DREMIO_ARROW_FLIGHT_SQL_JDBC_URL = "jdbc:arrow-flight-sql://127.0.0.1:3201
 const DREMIO_ARROW_FLIGHT_SQL_JDBC_DRIVER_CLASS = "org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver";
 const DREMIO_LEGACY_JDBC_URL = "jdbc:dremio:direct=127.0.0.1:31010";
 const DREMIO_LEGACY_JDBC_DRIVER_CLASS = "com.dremio.jdbc.Driver";
+/**
+ * OushuDB（偶数数据库）厂商 JDBC 连接默认值。
+ * @author xiaogui
+ * @since 2026-11-24 13:48:39
+ */
+const OUSHU_DEFAULT_JDBC_URL = "jdbc:oushudb://127.0.0.1:5432/hisdb";
+const OUSHU_DEFAULT_JDBC_DRIVER_CLASS = "com.oushu.Driver";
 const DEFAULT_SSH_USER = "root";
 const DIRECT_SIDEBAR_OBJECT_TYPES = new Set<DatabaseType>(["redis", "etcd", "zookeeper", "consul", "mongodb", "dynamodb", "elasticsearch", "easysearch", "meilisearch", "solr", "milvus", "qdrant", "weaviate", "chromadb", "mq", "mqtt", "nacos", "plugin"]);
 const ETCD_GRPC_MAX_INBOUND_DEFAULT_MIB = 32;
@@ -3092,6 +3099,19 @@ function applyProfile(val: string, preserveConnectionFields = false) {
       jdbcDriverPathsInput.value = "";
       jdbcManualClasspathOpen.value = true;
       applyPrestoSqlBuiltinDriverPathsIfAvailable();
+    }
+    /**
+     * OushuDB（偶数数据库）连接表单默认值：预填厂商 JDBC 驱动类与连接串模板，
+     * 用户只需补充主机、端口、库名并在 classpath 中选择厂商 jar。
+     * @author xiaogui
+     * @since 2026-11-24 13:48:39
+     */
+    if (profile.type === "oushudb") {
+      form.value.connection_string = OUSHU_DEFAULT_JDBC_URL;
+      form.value.jdbc_driver_class = OUSHU_DEFAULT_JDBC_DRIVER_CLASS;
+      form.value.jdbc_driver_paths = [];
+      jdbcDriverPathsInput.value = "";
+      jdbcManualClasspathOpen.value = true;
     }
     if (profile.type === "bigquery") {
       form.value.connection_string = undefined;

@@ -1468,6 +1468,10 @@ impl ConnectionConfig {
                 format!("{scheme}://{host}:{port}")
             }
             DatabaseType::Jdbc => "jdbc:<redacted>".to_string(),
+            // OushuDB（偶数数据库）脱敏 URL：与 JDBC 产品一致，避免连接串中的凭据外泄。
+            // @author xiaogui
+            // @since 2026-11-24 13:48:39
+            DatabaseType::Oushudb => "jdbc:<redacted>".to_string(),
             DatabaseType::Plugin => format!(
                 "plugin://{}/{}",
                 self.plugin_id.as_deref().unwrap_or("unknown"),
@@ -1762,6 +1766,12 @@ impl ConnectionConfig {
             }
             DatabaseType::Jdbc => {
                 self.connection_string.as_deref().filter(|value| !value.is_empty()).unwrap_or("jdbc:").to_string()
+            }
+            // OushuDB（偶数数据库）完整 URL：直接返回用户填写的厂商 JDBC 连接串。
+            // @author xiaogui
+            // @since 2026-11-24 13:48:39
+            DatabaseType::Oushudb => {
+                self.connection_string.as_deref().filter(|value| !value.is_empty()).unwrap_or("jdbc:oushudb:").to_string()
             }
             DatabaseType::Plugin => format!(
                 "plugin://{}/{}",

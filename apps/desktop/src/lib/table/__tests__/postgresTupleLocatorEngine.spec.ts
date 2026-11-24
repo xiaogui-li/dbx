@@ -31,3 +31,24 @@ describe("postgresTupleLocatorUnsupportedEngine (#14745)", () => {
     expect(shouldIncludeSyntheticRowId("postgres", keyless, "TABLE") && !postgresTupleLocatorUnsupportedEngine(connection("postgres", "Apache Cloudberry", "PostgreSQL 14.4 (Apache Cloudberry 1.2.0)"))).toBe(false);
   });
 });
+
+/**
+ * OushuDB（偶数数据库）走独立 db_type，不携带 postgres-ctid synthetic key，
+ * 因此无主键基表不会注入 tableoid/ctid/xmin 隐藏行号，从源头规避
+ * "column xmin does not exist" 报错。
+ * @author xiaogui
+ * @since 2026-11-24 13:48:39
+ */
+describe("OushuDB never receives the PostgreSQL tuple locator", () => {
+  it("does not include a synthetic row id for keyless OushuDB base tables", () => {
+    expect(shouldIncludeSyntheticRowId("oushudb", [], "TABLE")).toBe(false);
+    expect(shouldIncludeSyntheticRowId("oushudb", [], "BASE TABLE")).toBe(false);
+  });
+
+  it("is not treated as a postgres engine even with a PostgreSQL product name", () => {
+    // OushuDB JDBC drivers report productName = PostgreSQL and a version string
+    // containing Greenplum, but the independent db_type keeps it off the locator path.
+    expect(postgresTupleLocatorUnsupportedEngine(connection("oushudb", "PostgreSQL", "PostgreSQL 12.12 (OushuDB 6.4.4.0) (Greenplum Database 7.0.0)"))).toBe(false);
+    expect(shouldIncludeSyntheticRowId("oushudb", [], "TABLE") && !postgresTupleLocatorUnsupportedEngine(connection("oushudb", "PostgreSQL", "PostgreSQL 12.12 (OushuDB 6.4.4.0)"))).toBe(false);
+  });
+});

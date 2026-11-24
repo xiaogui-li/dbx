@@ -32,6 +32,10 @@ export const databaseIconAssets: Readonly<Record<string, string>> = {
   oceanbase_oracle: "oceanbase",
   opengauss: "opengauss",
   gaussdb: "gaussdb",
+  // OushuDB（偶数数据库）图标映射，复用 PostgreSQL 兼容系图标资源。
+  // @author xiaogui
+  // @since 2026-11-24 13:48:39
+  oushudb: "oushudb",
   questdb: "questdb",
   kwdb: "kwdb",
   kingbase: "kingbase",

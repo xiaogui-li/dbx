@@ -1,0 +1,41 @@
+schemaVersion: 1
+order: 431
+dbType: oushudb
+compareModes: [schema, data]
+transferSupportLevel: family-compatible
+transferObjectFamily: postgres
+rustVariant: Oushudb
+label: OushuDB
+dialect: PostgreSQL
+runtimeMode: external
+mcpMode: bridge
+formKind: jdbc
+singleConnectionPool: false
+metadataConnectionScoped: false
+skipTcpProbe: false
+defaultPort: 5432
+traits:
+  schemaAware: true
+  clearableQuerySchema: true
+  treeSchema: true
+  pgVacuum: true
+  pgLikeStructure: true
+  diagramSql: true
+supportLevel: operate
+capabilities:
+  queryExecution: true
+  metadataBrowse: true
+  objectBrowser: true
+  objectSource: true
+  schemaSearch: true
+  diagram: true
+  tableDataEdit: true
+  tableStructureEdit: true
+  tableImport: true
+  dataTransfer: true
+  sqlFileExecution: true
+  databaseCreate: true
+  fieldLineage: true
+  sqlExplain: false
+  userAdmin: true
+  driverManagement: false

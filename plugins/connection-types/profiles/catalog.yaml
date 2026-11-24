@@ -337,6 +337,13 @@ profiles:
     port: 5432
     user: gaussdb
     category: domestic
+  - id: oushudb
+    dbType: oushudb
+    label: OushuDB
+    icon: oushudb
+    port: 5432
+    user: his
+    category: domestic
   - id: kwdb
     dbType: kwdb
     label: KWDB

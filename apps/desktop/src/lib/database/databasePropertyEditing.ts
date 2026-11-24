@@ -14,7 +14,10 @@ type PropertyEditConnection = (Pick<ConnectionConfig, "db_type" | "driver_profil
 type DatabaseNode = Pick<{ type: TreeNodeType; database?: string | null }, "type" | "database">;
 type SchemaNode = Pick<{ type: TreeNodeType; database?: string | null; schema?: string | null }, "type" | "database" | "schema">;
 
-const POSTGRES_COMMENT_TYPES = new Set<DatabaseType>(["postgres", "gaussdb", "kwdb", "kingbase", "highgo", "uxdb", "vastbase", "opengauss", "yashandb"]);
+// OushuDB（偶数数据库）纳入 PostgreSQL 兼容系的注释编辑能力集合。
+// @author xiaogui
+// @since 2026-11-24 13:43:10
+const POSTGRES_COMMENT_TYPES = new Set<DatabaseType>(["postgres", "gaussdb", "kwdb", "kingbase", "highgo", "uxdb", "vastbase", "opengauss", "yashandb", "oushudb"]);
 
 export const DATABASE_PROPERTY_EDITING_MATRIX = {
   mysql: { database: ["charsetCollation"] },
@@ -48,6 +51,10 @@ export const DATABASE_PROPERTY_EDITING_MATRIX = {
   redshift: { deferred: "comment catalog compatibility not verified for first pass" },
   dameng: { deferred: "schema/user settings need a dedicated workflow" },
   gaussdb: { database: ["databaseComment"], schema: ["schemaComment"] },
+  // OushuDB（偶数数据库）属性编辑与 PostgreSQL 兼容系一致。
+  // @author xiaogui
+  // @since 2026-11-24 13:43:10
+  oushudb: { database: ["databaseComment"], schema: ["schemaComment"] },
   kingbase: { database: ["databaseComment"], schema: ["schemaComment"] },
   highgo: { database: ["databaseComment"], schema: ["schemaComment"] },
   uxdb: { database: ["databaseComment"], schema: ["schemaComment"] },

@@ -856,7 +856,10 @@ pub fn profile_for(db_type: DatabaseType) -> DdlDialectProfile {
         }
 
         // PostgreSQL family
-        Postgres | Redshift | Gaussdb | Kingbase | Highgo | Vastbase | OpenGauss | Kwdb | Uxdb | Gbase8c => {
+        // OushuDB（偶数数据库）声明 dialect=PostgreSQL，复用 PostgreSQL 族 DDL profile。
+        // @author xiaogui
+        // @since 2026-11-24 13:48:39
+        Postgres | Redshift | Gaussdb | Kingbase | Highgo | Vastbase | OpenGauss | Kwdb | Uxdb | Gbase8c | Oushudb => {
             postgres_family(db_type)
         }
 

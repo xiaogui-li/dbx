@@ -2218,7 +2218,10 @@ async fn test_connection_with_info_impl(
                         Err(err) => Err(err),
                     }
                 }
-                DatabaseType::Jdbc => {
+                // OushuDB（偶数数据库）与通用 JDBC 共用 external driver 测试通道。
+                // @author xiaogui
+                // @since 2026-11-24 13:48:39
+                DatabaseType::Jdbc | DatabaseType::Oushudb => {
                     let jdbc_config = jdbc_command_config_for_endpoint(&config, &host, port)?;
                     match state.test_external_driver_with_info("jdbc", &jdbc_config).await {
                         Ok(details) => {
@@ -2745,7 +2748,10 @@ async fn connect_db_inner(
                 let jdbc_config = prestosql_jdbc_config_for_endpoint(&db_config, &host, port)?;
                 state.external_driver_pool("jdbc", &jdbc_config).await?
             }
-            DatabaseType::Jdbc => {
+            // OushuDB（偶数数据库）与通用 JDBC 共用 external driver 连接池。
+            // @author xiaogui
+            // @since 2026-11-24 13:48:39
+            DatabaseType::Jdbc | DatabaseType::Oushudb => {
                 let jdbc_config = jdbc_command_config_for_endpoint(&db_config, &host, port)?;
                 state.external_driver_pool("jdbc", &jdbc_config).await?
             }
