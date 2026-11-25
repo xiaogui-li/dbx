@@ -1760,11 +1760,17 @@ async fn test_connection_with_info_impl(
                 | DatabaseType::Gaussdb
                 | DatabaseType::Kwdb
                 | DatabaseType::Questdb
-                | DatabaseType::OpenGauss
-                // OushuDB 走原生 PostgreSQL 连接测试，随包分发无需外部 JDBC 插件。
+                | DatabaseType::OpenGauss => match db::postgres::connect(&url, connect_timeout).await {
+                    Ok(pool) => {
+                        pool.close();
+                        Ok("Connection successful".to_string())
+                    }
+                    Err(e) => Err(e),
+                },
+                // OushuDB 连接测试改走专用驱动入口。
                 // @author xiaogui
-                // @since 2026-11-25 12:51:50
-                | DatabaseType::Oushudb => match db::postgres::connect(&url, connect_timeout).await {
+                // @since 2026-11-26 00:53:25
+                DatabaseType::Oushudb => match db::oushudb::connect(&url, connect_timeout).await {
                     Ok(pool) => {
                         pool.close();
                         Ok("Connection successful".to_string())
@@ -2380,10 +2386,10 @@ async fn connect_db_inner(
             | DatabaseType::Gaussdb
             | DatabaseType::Kwdb
             | DatabaseType::Questdb
-            | DatabaseType::OpenGauss
+            | DatabaseType::OpenGauss => PoolKind::Postgres(db::postgres::connect(&url, connect_timeout).await?),
             // @author xiaogui
-            // @since 2026-11-25 12:52:06
-            | DatabaseType::Oushudb => PoolKind::Postgres(db::postgres::connect(&url, connect_timeout).await?),
+            // @since 2026-11-26 00:53:44
+            DatabaseType::Oushudb => PoolKind::Postgres(db::oushudb::connect(&url, connect_timeout).await?),
             DatabaseType::Sqlite => PoolKind::Sqlite(
                 connect_sqlite_from_config_with_state(Some((state.inner().as_ref(), &prepared.stamp)), &id, &db_config)
                     .await?,

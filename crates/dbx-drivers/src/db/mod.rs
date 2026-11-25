@@ -31,6 +31,7 @@ pub use dbx_driver_mongodb::mongo_driver;
 pub use dbx_driver_mysql::{mysql, mysql_compatible, ob_oracle, oceanbase_mysql};
 pub mod opentenbase;
 pub use dbx_driver_postgres as postgres;
+pub use dbx_driver_oushudb as oushudb;
 pub mod proxy_tunnel;
 pub mod questdb;
 pub use dbx_driver_redis as redis_driver;

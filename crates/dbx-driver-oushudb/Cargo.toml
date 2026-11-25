@@ -1,0 +1,10 @@
+[package]
+name = "dbx-driver-oushudb"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+dbx-driver-postgres = { path = "../dbx-driver-postgres" }
+deadpool-postgres = { version = "0.14", features = ["rt_tokio_1"] }

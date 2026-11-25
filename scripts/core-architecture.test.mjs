@@ -32,9 +32,10 @@ const allowedDependencies = {
   "dbx-driver-mongodb": ["dbx-types", "dbx-driver-support"],
   "dbx-driver-mysql": ["dbx-types", "dbx-sql-core", "dbx-sql-dialect", "dbx-driver-support"],
   "dbx-driver-postgres": ["dbx-types", "dbx-sql-core", "dbx-driver-support"],
+  "dbx-driver-oushudb": ["dbx-driver-postgres"],
   "dbx-driver-redis": ["dbx-types", "dbx-driver-support"],
   "dbx-driver-sqlserver": ["dbx-types", "dbx-sql-core", "dbx-sql-data", "dbx-driver-support"],
-  "dbx-drivers": ["dbx-types", "dbx-sql-core", "dbx-sql-data", "dbx-sql-dialect", "dbx-platform", "dbx-sqlite-worker", "dbx-driver-support", "dbx-driver-agent", "dbx-driver-elasticsearch", "dbx-driver-mongodb", "dbx-driver-mysql", "dbx-driver-postgres", "dbx-driver-redis", "dbx-driver-sqlserver"],
+  "dbx-drivers": ["dbx-types", "dbx-sql-core", "dbx-sql-data", "dbx-sql-dialect", "dbx-platform", "dbx-sqlite-worker", "dbx-driver-support", "dbx-driver-agent", "dbx-driver-elasticsearch", "dbx-driver-mongodb", "dbx-driver-mysql", "dbx-driver-postgres", "dbx-driver-oushudb", "dbx-driver-redis", "dbx-driver-sqlserver"],
 };
 const core = members.get("dbx-core");
 

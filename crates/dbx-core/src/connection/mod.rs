@@ -3671,11 +3671,7 @@ impl AppState {
             | DatabaseType::Gaussdb
             | DatabaseType::Kwdb
             | DatabaseType::Questdb
-            | DatabaseType::OpenGauss
-            // OushuDB 走原生 PostgreSQL 连接池，随包分发无需外部 JDBC 插件。
-            // @author xiaogui
-            // @since 2026-11-25 12:51:07
-            | DatabaseType::Oushudb => {
+            | DatabaseType::OpenGauss => {
                 // A session pool must have one physical client: sequential
                 // statements can otherwise lose temp tables/SET state when a
                 // pool checkout selects another PostgreSQL connection.
@@ -3687,6 +3683,21 @@ impl AppState {
                 .await?;
                 // Build TLS cancel context for reconstructing TLS connection during cancel
                 if let Some(ctx) = db::postgres::build_postgres_cancel_context(&url) {
+                    self.postgres_cancel_contexts.write().await.insert(pool_key.clone(), ctx);
+                }
+                PoolKind::Postgres(pg_pool)
+            }
+            // OushuDB 使用独立驱动 crate 与 oushudb:// scheme，协议仍复用 PG wire。
+            // @author xiaogui
+            // @since 2026-11-26 00:53:02
+            DatabaseType::Oushudb => {
+                let pg_pool = db::oushudb::connect_with_max_connections(
+                    &url,
+                    connect_timeout,
+                    postgres_pool_max_connections_for_session(client_session_id),
+                )
+                .await?;
+                if let Some(ctx) = db::oushudb::build_postgres_cancel_context(&url) {
                     self.postgres_cancel_contexts.write().await.insert(pool_key.clone(), ctx);
                 }
                 PoolKind::Postgres(pg_pool)

@@ -51,6 +51,7 @@ COPY crates/dbx-driver-elasticsearch/Cargo.toml crates/dbx-driver-elasticsearch/
 COPY crates/dbx-driver-mongodb/Cargo.toml crates/dbx-driver-mongodb/
 COPY crates/dbx-driver-mysql/Cargo.toml crates/dbx-driver-mysql/
 COPY crates/dbx-driver-postgres/Cargo.toml crates/dbx-driver-postgres/
+COPY crates/dbx-driver-oushudb/Cargo.toml crates/dbx-driver-oushudb/
 COPY crates/dbx-driver-redis/Cargo.toml crates/dbx-driver-redis/
 COPY crates/dbx-driver-sqlserver/Cargo.toml crates/dbx-driver-sqlserver/
 COPY crates/dbx-drivers/Cargo.toml crates/dbx-drivers/
@@ -67,7 +68,7 @@ COPY vendor/ vendor/
 RUN for crate in dbx-platform dbx-types dbx-sql dbx-sql-core dbx-sql-data dbx-sql-dialect dbx-sql-schema \
       dbx-formats dbx-ai-provider dbx-plugin-runtime dbx-driver-agent dbx-driver-support \
       dbx-driver-elasticsearch dbx-driver-mongodb dbx-driver-mysql dbx-driver-postgres \
-      dbx-driver-redis dbx-driver-sqlserver dbx-drivers dbx-sqlite-worker dbx-tauri-consul dbx-tauri-schema; do \
+      dbx-driver-oushudb dbx-driver-redis dbx-driver-sqlserver dbx-drivers dbx-sqlite-worker dbx-tauri-consul dbx-tauri-schema; do \
       mkdir -p "crates/$crate/src" && printf "" > "crates/$crate/src/lib.rs"; \
     done \
     && echo 'fn main() {}' > crates/dbx-sqlite-worker/src/main.rs

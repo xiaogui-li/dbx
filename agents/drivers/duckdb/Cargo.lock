@@ -1445,6 +1445,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dbx-driver-oushudb"
+version = "0.1.0"
+dependencies = [
+ "dbx-driver-postgres",
+ "deadpool-postgres",
+]
+
+[[package]]
 name = "dbx-driver-redis"
 version = "0.1.0"
 dependencies = [
@@ -1514,6 +1522,7 @@ dependencies = [
  "dbx-driver-mongodb",
  "dbx-driver-mysql",
  "dbx-driver-postgres",
+ "dbx-driver-oushudb",
  "dbx-driver-redis",
  "dbx-driver-sqlserver",
  "dbx-driver-support",

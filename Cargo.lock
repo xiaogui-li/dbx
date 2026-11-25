@@ -2427,6 +2427,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dbx-driver-oushudb"
+version = "0.1.0"
+dependencies = [
+ "dbx-driver-postgres",
+ "deadpool-postgres",
+]
+
+[[package]]
 name = "dbx-driver-postgres"
 version = "0.1.0"
 dependencies = [
@@ -2530,6 +2538,7 @@ dependencies = [
  "dbx-driver-elasticsearch",
  "dbx-driver-mongodb",
  "dbx-driver-mysql",
+ "dbx-driver-oushudb",
  "dbx-driver-postgres",
  "dbx-driver-redis",
  "dbx-driver-sqlserver",

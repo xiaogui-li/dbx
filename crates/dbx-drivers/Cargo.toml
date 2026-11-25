@@ -24,6 +24,7 @@ dbx-driver-elasticsearch = { path = "../dbx-driver-elasticsearch" }
 dbx-driver-mongodb = { path = "../dbx-driver-mongodb" }
 dbx-driver-mysql = { path = "../dbx-driver-mysql" }
 dbx-driver-postgres = { path = "../dbx-driver-postgres" }
+dbx-driver-oushudb = { path = "../dbx-driver-oushudb" }
 dbx-driver-redis = { path = "../dbx-driver-redis" }
 dbx-driver-sqlserver = { path = "../dbx-driver-sqlserver" }
 dbx-types = { path = "../dbx-types", default-features = false }
