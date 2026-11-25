@@ -12,8 +12,8 @@ pub fn parse_version(version: &str) -> Vec<u64> {
 /// 使自有构建之间也能通过「检查更新」正确排序。
 ///
 /// @author xiaogui
-/// @since 2026-11-24 16:45:14
-pub const SELF_BUILD_NUMBER: u32 = 4;
+/// @since 2026-11-25 20:14:12
+pub const SELF_BUILD_NUMBER: u32 = 5;
 
 /// 生成自建 4 段版本号：取传入版本的前 3 段，追加 [`SELF_BUILD_NUMBER`] 作为第 4 段。
 ///
