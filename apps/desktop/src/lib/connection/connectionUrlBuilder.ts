@@ -58,6 +58,7 @@ const STANDARD_URL_SCHEMES: Partial<Record<DatabaseType, string>> = {
   vastbase: "postgresql",
   sundb: "postgresql",
   gaussdb: "postgresql",
+  oushudb: "oushudb",
   kingbase: "kingbase8",
   sqlserver: "mssql",
   oracle: "oracle",
@@ -95,6 +96,7 @@ const JDBC_URL_PREFIXES: Partial<Record<DatabaseType, string>> = {
   redshift: "jdbc:redshift",
   questdb: "jdbc:postgresql",
   gaussdb: "jdbc:postgresql",
+  oushudb: "jdbc:oushudb",
   opengauss: "jdbc:opengauss",
   kingbase: "jdbc:kingbase8",
   highgo: "jdbc:highgo",
@@ -122,10 +124,10 @@ const JDBC_URL_PREFIXES: Partial<Record<DatabaseType, string>> = {
 };
 
 /** PostgreSQL wire-protocol families that accept libpq DSN and psql. */
-const POSTGRES_WIRE_DB_TYPES = new Set<DatabaseType>(["postgres", "redshift", "gaussdb", "questdb", "kwdb", "yashandb", "kingbase", "highgo", "uxdb", "vastbase", "sundb"]);
+const POSTGRES_WIRE_DB_TYPES = new Set<DatabaseType>(["postgres", "redshift", "gaussdb", "questdb", "kwdb", "yashandb", "kingbase", "highgo", "uxdb", "vastbase", "sundb", "oushudb"]);
 
 /** PG-wire families whose JDBC driver accepts the `ssl`/`sslmode` properties. */
-const PG_JDBC_PREFIXES = new Set(["jdbc:postgresql", "jdbc:redshift", "jdbc:gaussdb", "jdbc:opengauss", "jdbc:kingbase8", "jdbc:highgo"]);
+const PG_JDBC_PREFIXES = new Set(["jdbc:postgresql", "jdbc:redshift", "jdbc:gaussdb", "jdbc:opengauss", "jdbc:kingbase8", "jdbc:highgo", "jdbc:oushudb"]);
 
 /** MySQL-family prefixes that share Connector/J's `?key=value&...` query grammar. */
 const MYSQL_QUERY_JDBC_PREFIXES = new Set(["jdbc:mysql", "jdbc:mariadb", "jdbc:oceanbase"]);
@@ -139,8 +141,17 @@ function isLocalFileUrlCopyConnection(config: ConnectionUrlCopyConfig): boolean 
   return dbType === "sqlite" || dbType === "duckdb" || dbType === "access" || (dbType === "h2" && Number(config.port) === 0);
 }
 
+/**
+ * 返回配置里保存的显式连接串。OushuDB 的复制项按 oushudb:// 与 jdbc:oushudb://
+ * 由 host/port/database 生成，旧连接里残留的 jdbc: 串不参与预览，避免与其他复制项不一致。
+ *
+ * @author xiaogui
+ * @since 2026-11-26 00:26:18
+ */
 function explicitConnectionString(config: ConnectionUrlCopyConfig): string {
-  return config.connection_string?.trim() ?? "";
+  const value = config.connection_string?.trim() ?? "";
+  if (config.db_type === "oushudb" && /^jdbc:/i.test(value)) return "";
+  return value;
 }
 
 function looksLikeConnectionString(value: string): boolean {

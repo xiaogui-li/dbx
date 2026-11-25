@@ -17,6 +17,7 @@ import {
   displayChangelogTag,
   fetchChangelogIndex,
   fetchChangelogRelease,
+  selfBuildRepositoryUrl,
   type ChangelogItem,
   type ChangelogLang,
   type ChangelogRelease,
@@ -223,6 +224,10 @@ watch(changelogLang, (lang) => {
           <ExternalLink class="mr-1 h-3.5 w-3.5" />
           {{ t("settings.changelogOpenWebsite") }}
         </Button>
+        <Button type="button" variant="outline" size="sm" @click="openExternalUrl(selfBuildRepositoryUrl())">
+          <ExternalLink class="mr-1 h-3.5 w-3.5" />
+          GitHub
+        </Button>
         <Button type="button" variant="outline" size="sm" :disabled="loading" :title="t('settings.changelogRetry')" :aria-label="t('settings.changelogRetry')" @click="load(true)">
           <Loader2 v-if="loading" class="h-3.5 w-3.5 animate-spin" />
           <RefreshCw v-else class="h-3.5 w-3.5" />
@@ -242,6 +247,10 @@ watch(changelogLang, (lang) => {
         <Button type="button" variant="outline" size="sm" @click="openExternalUrl(changelogWebsiteUrl(changelogLang))">
           <ExternalLink class="mr-1 h-3.5 w-3.5" />
           {{ t("settings.changelogOpenWebsite") }}
+        </Button>
+        <Button type="button" variant="outline" size="sm" @click="openExternalUrl(selfBuildRepositoryUrl())">
+          <ExternalLink class="mr-1 h-3.5 w-3.5" />
+          GitHub
         </Button>
       </div>
     </div>

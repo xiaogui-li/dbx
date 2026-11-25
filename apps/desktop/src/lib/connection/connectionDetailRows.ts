@@ -34,9 +34,17 @@ function databaseValue(config: ConnectionConfig): string {
   return config.db_type === "redis" && database ? effectiveRedisDatabaseIndex(database) : database;
 }
 
+/**
+ * 悬停卡片与编辑器工具栏展示的连接 URL：OushuDB 忽略历史残留的 jdbc: 串，
+ * 统一按 oushudb:// + host/port/database 生成。
+ *
+ * @author xiaogui
+ * @since 2026-11-26 00:27:48
+ */
 export function connectionDetailUrl(config: ConnectionConfig): string {
   const explicit = clean(config.connection_string);
-  if (explicit) return redactConnectionStringSecrets(explicit);
+  const useExplicit = explicit && !(config.db_type === "oushudb" && /^jdbc:/i.test(explicit));
+  if (useExplicit) return redactConnectionStringSecrets(explicit);
 
   const host = clean(config.host);
   if (!host) return "";

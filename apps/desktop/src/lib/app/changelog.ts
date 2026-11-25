@@ -35,32 +35,15 @@ export type ChangelogData = {
 
 export type ChangelogLang = "en" | "cn";
 
-const feedCache = new Map<ChangelogLang, Promise<ChangelogData>>();
-const indexCache = new Map<ChangelogLang, Promise<ChangelogIndexData>>();
-const releaseCache = new Map<string, Promise<ChangelogRelease>>();
-
-function releaseCacheKey(lang: ChangelogLang, tag: string) {
-  return `${lang}\u0000${tag}`;
-}
-
 /**
- * Drop cached changelog payloads so the next read goes back to R2. A release
- * body is cached per tag, so clearing one language has to clear each of its tags.
+ * 前端不再保留内存缓存：每次读取都真实调用后端，由后端执行「网络优先、失败回退磁盘缓存」。
+ * 保留该函数是为了兼容调用方，语义变为无需操作。
+ *
+ * @author xiaogui
+ * @since 2026-11-25 23:07:10
  */
-export function clearChangelogCache(lang?: ChangelogLang) {
-  if (!lang) {
-    feedCache.clear();
-    indexCache.clear();
-    releaseCache.clear();
-    return;
-  }
-  feedCache.delete(lang);
-  indexCache.delete(lang);
-  const prefix = `${lang}\u0000`;
-  // Map iterators tolerate deleting the entry being visited.
-  for (const key of releaseCache.keys()) {
-    if (key.startsWith(prefix)) releaseCache.delete(key);
-  }
+export function clearChangelogCache(_lang?: ChangelogLang) {
+  // 缓存已下沉到 Rust 层磁盘缓存，前端无状态可清。
 }
 
 export function createLatestRequestGuard() {
@@ -84,6 +67,17 @@ export function changelogReleaseUrl(tag: string): string {
 }
 
 /**
+ * 自有构建仓库首页：更新管理里与「在官网查看」并列的跳转目标。
+ * 官网按钮保持原动作不变，这里只新增自有仓库入口。
+ *
+ * @author xiaogui
+ * @since 2026-11-25 23:09:20
+ */
+export function selfBuildRepositoryUrl(): string {
+  return "https://github.com/xiaogui-li/dbx";
+}
+
+/**
  * Tag to show in version lists. A beta promoted to stable is not renamed —
  * the release keeps its beta tag while its name already reads `DBX vX.Y.Z` —
  * so a stable user would read a beta identifier for what is actually the
@@ -98,36 +92,22 @@ export function displayChangelogTag(tag: string): string {
   return match ? match[1] : trimmed;
 }
 
-function cached<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>, force: boolean): Promise<T> {
-  if (force) cache.delete(key);
-  let pending = cache.get(key);
-  if (!pending) {
-    pending = load().catch((error) => {
-      cache.delete(key);
-      throw error;
-    });
-    cache.set(key, pending);
-  }
-  return pending;
-}
-
 /**
- * Version list only (`changelog/index-<lang>.json`, a few kilobytes). The full
- * feed carries every release body and is megabytes, so any UI that only lists
- * versions reads the index instead of downloading all release notes.
+ * Version list: every call goes to the backend, which re-fetches the static
+ * changelog.json and falls back to its disk cache (or builtin snapshot) on error.
  */
-export async function fetchChangelogIndex(lang: ChangelogLang, options: { force?: boolean } = {}): Promise<ChangelogIndexData> {
-  return cached(indexCache, lang, () => loadChangelogIndex(lang), options.force === true);
+export async function fetchChangelogIndex(lang: ChangelogLang, _options: { force?: boolean } = {}): Promise<ChangelogIndexData> {
+  return loadChangelogIndex(lang);
 }
 
-/** Release body for one version (`changelog/releases-<lang>/<tag>.json`). */
-export async function fetchChangelogRelease(lang: ChangelogLang, tag: string, options: { force?: boolean } = {}): Promise<ChangelogRelease> {
-  return cached(releaseCache, releaseCacheKey(lang, tag), () => loadChangelogRelease(lang, tag), options.force === true);
+/** Release body for one version, read fresh from the backend on every call. */
+export async function fetchChangelogRelease(lang: ChangelogLang, tag: string, _options: { force?: boolean } = {}): Promise<ChangelogRelease> {
+  return loadChangelogRelease(lang, tag);
 }
 
 /** Full feed in one request; kept for callers that need every release body at once. */
-export async function fetchChangelog(lang: ChangelogLang, options: { force?: boolean } = {}): Promise<ChangelogData> {
-  return cached(feedCache, lang, () => loadChangelog(lang), options.force === true);
+export async function fetchChangelog(lang: ChangelogLang, _options: { force?: boolean } = {}): Promise<ChangelogData> {
+  return loadChangelog(lang);
 }
 
 async function loadChangelogIndex(lang: ChangelogLang): Promise<ChangelogIndexData> {

@@ -119,13 +119,24 @@ fn release_identity_version(release: &TauriRelease) -> &str {
     release.release_tag.as_deref().unwrap_or(&release.version)
 }
 
+/// 拉取更新清单：每次检查都拼时间戳并带 no-cache，绕开本机代理与 CDN 缓存。
+/// 否则发布新包后第一次「立即检查」仍命中旧 latest.json，要等缓存过期或切换渠道
+/// 触发的第二次请求才看到新版本。
+///
+/// @author xiaogui
+/// @since 2026-11-25 23:12:40
 async fn fetch_first_available(client: &reqwest::Client, candidates: &[String]) -> Result<reqwest::Response, String> {
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
     let mut errors = Vec::with_capacity(candidates.len());
     for url in candidates {
+        let separator = if url.contains('?') { "&" } else { "?" };
+        let request_url = format!("{url}{separator}t={stamp}");
         match client
-            .get(url)
+            .get(&request_url)
             .header(reqwest::header::USER_AGENT, "dbx-update-checker")
             .header(reqwest::header::ACCEPT_ENCODING, "identity")
+            .header(reqwest::header::CACHE_CONTROL, "no-cache")
+            .header(reqwest::header::PRAGMA, "no-cache")
             .send()
             .await
             .and_then(|response| response.error_for_status())

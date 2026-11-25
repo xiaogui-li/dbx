@@ -134,8 +134,16 @@ function isLocalFilePresentationConnection(connection: Pick<ConnectionPresentati
   return isLocalFileDatabaseType(connection.db_type) && (connection.db_type !== "h2" || connection.port === 0);
 }
 
+/**
+ * 连接详情与悬停卡片使用的 URL scheme：OushuDB 保留自有 oushudb://，不借用 postgresql://。
+ *
+ * @author xiaogui
+ * @since 2026-11-26 00:27:05
+ */
 export function connectionDisplayUrlScheme(connection: Pick<ConnectionConfig, "db_type"> & Partial<Pick<ConnectionConfig, "driver_profile" | "ssl">>): string {
   switch (connection.db_type) {
+    case "oushudb":
+      return "oushudb";
     case "postgres":
     case "kwdb":
     case "yashandb":
