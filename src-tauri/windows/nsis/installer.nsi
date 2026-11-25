@@ -42,7 +42,7 @@ ${StrLoc}
 ; SELF_BUILD_NUMBER 一致（由 scripts/check-self-build-version.mjs 校验）。
 ; @author xiaogui
 ; @since 2026-11-25 20:14:15
-!define SELF_BUILD_NUMBER "5"
+!define SELF_BUILD_NUMBER "6"
 !define SELF_DISPLAY_VERSION "${VERSION}.${SELF_BUILD_NUMBER}"
 !define HOMEPAGE "{{homepage}}"
 !define INSTALLMODE "{{install_mode}}"

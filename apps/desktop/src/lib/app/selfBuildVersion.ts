@@ -8,7 +8,7 @@
  * @author xiaogui
  * @since 2026-11-25 20:14:14
  */
-export const SELF_BUILD_NUMBER = 5;
+export const SELF_BUILD_NUMBER = 6;
 
 /**
  * 把上游 3 段版本格式化为自建 4 段版本；已是 4 段时替换为当前构建号。

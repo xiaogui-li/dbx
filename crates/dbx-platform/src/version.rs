@@ -13,7 +13,7 @@ pub fn parse_version(version: &str) -> Vec<u64> {
 ///
 /// @author xiaogui
 /// @since 2026-11-25 20:14:12
-pub const SELF_BUILD_NUMBER: u32 = 5;
+pub const SELF_BUILD_NUMBER: u32 = 6;
 
 /// 生成自建 4 段版本号：取传入版本的前 3 段，追加 [`SELF_BUILD_NUMBER`] 作为第 4 段。
 ///
