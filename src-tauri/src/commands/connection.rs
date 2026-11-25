@@ -1760,7 +1760,11 @@ async fn test_connection_with_info_impl(
                 | DatabaseType::Gaussdb
                 | DatabaseType::Kwdb
                 | DatabaseType::Questdb
-                | DatabaseType::OpenGauss => match db::postgres::connect(&url, connect_timeout).await {
+                | DatabaseType::OpenGauss
+                // OushuDB 走原生 PostgreSQL 连接测试，随包分发无需外部 JDBC 插件。
+                // @author xiaogui
+                // @since 2026-11-25 12:51:50
+                | DatabaseType::Oushudb => match db::postgres::connect(&url, connect_timeout).await {
                     Ok(pool) => {
                         pool.close();
                         Ok("Connection successful".to_string())
@@ -2218,10 +2222,10 @@ async fn test_connection_with_info_impl(
                         Err(err) => Err(err),
                     }
                 }
-                // OushuDB（偶数数据库）与通用 JDBC 共用 external driver 测试通道。
+                // OushuDB 已改为原生 PostgreSQL 测试通道（见上方 native 分支）。
                 // @author xiaogui
-                // @since 2026-11-24 13:48:39
-                DatabaseType::Jdbc | DatabaseType::Oushudb => {
+                // @since 2026-11-25 12:51:51
+                DatabaseType::Jdbc => {
                     let jdbc_config = jdbc_command_config_for_endpoint(&config, &host, port)?;
                     match state.test_external_driver_with_info("jdbc", &jdbc_config).await {
                         Ok(details) => {
@@ -2376,7 +2380,10 @@ async fn connect_db_inner(
             | DatabaseType::Gaussdb
             | DatabaseType::Kwdb
             | DatabaseType::Questdb
-            | DatabaseType::OpenGauss => PoolKind::Postgres(db::postgres::connect(&url, connect_timeout).await?),
+            | DatabaseType::OpenGauss
+            // @author xiaogui
+            // @since 2026-11-25 12:52:06
+            | DatabaseType::Oushudb => PoolKind::Postgres(db::postgres::connect(&url, connect_timeout).await?),
             DatabaseType::Sqlite => PoolKind::Sqlite(
                 connect_sqlite_from_config_with_state(Some((state.inner().as_ref(), &prepared.stamp)), &id, &db_config)
                     .await?,
@@ -2748,10 +2755,10 @@ async fn connect_db_inner(
                 let jdbc_config = prestosql_jdbc_config_for_endpoint(&db_config, &host, port)?;
                 state.external_driver_pool("jdbc", &jdbc_config).await?
             }
-            // OushuDB（偶数数据库）与通用 JDBC 共用 external driver 连接池。
+            // OushuDB 已改为原生 PostgreSQL 连接池（见上方 native 分支）。
             // @author xiaogui
-            // @since 2026-11-24 13:48:39
-            DatabaseType::Jdbc | DatabaseType::Oushudb => {
+            // @since 2026-11-25 12:52:07
+            DatabaseType::Jdbc => {
                 let jdbc_config = jdbc_command_config_for_endpoint(&db_config, &host, port)?;
                 state.external_driver_pool("jdbc", &jdbc_config).await?
             }

@@ -7,9 +7,12 @@ transferObjectFamily: postgres
 rustVariant: Oushudb
 label: OushuDB
 dialect: PostgreSQL
-runtimeMode: external
-mcpMode: bridge
-formKind: jdbc
+# OushuDB 走 PostgreSQL wire protocol，由 dbx-driver-postgres（tokio-postgres）
+# 原生驱动连接，随安装包分发，不再依赖外部 JDBC 插件与厂商 jar。
+# @author xiaogui
+# @since 2026-11-25 12:49:01
+runtimeMode: native
+mcpMode: direct
 singleConnectionPool: false
 metadataConnectionScoped: false
 skipTcpProbe: false

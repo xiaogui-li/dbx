@@ -3671,7 +3671,11 @@ impl AppState {
             | DatabaseType::Gaussdb
             | DatabaseType::Kwdb
             | DatabaseType::Questdb
-            | DatabaseType::OpenGauss => {
+            | DatabaseType::OpenGauss
+            // OushuDB 走原生 PostgreSQL 连接池，随包分发无需外部 JDBC 插件。
+            // @author xiaogui
+            // @since 2026-11-25 12:51:07
+            | DatabaseType::Oushudb => {
                 // A session pool must have one physical client: sequential
                 // statements can otherwise lose temp tables/SET state when a
                 // pool checkout selects another PostgreSQL connection.
@@ -4249,11 +4253,10 @@ impl AppState {
                 let jdbc_config = prestosql_jdbc_config_for_endpoint(&db_config, &host, port)?;
                 self.external_driver_pool("jdbc", &jdbc_config).await?
             }
-            // OushuDB（偶数数据库）与通用 JDBC 共用外部驱动通道：由用户提供的
-            // 厂商 jar 与 jdbc:oushudb:// 连接串驱动。
+            // OushuDB 已改为原生 PostgreSQL 连接池（见上方 native 分支），不再走外部 JDBC 通道。
             // @author xiaogui
-            // @since 2026-11-24 13:48:39
-            DatabaseType::Jdbc | DatabaseType::Oushudb => {
+            // @since 2026-11-25 12:51:08
+            DatabaseType::Jdbc => {
                 let mut jdbc_config = db_config.clone();
                 if host != config.host || port != config.port {
                     if let Some(ref url) = jdbc_config.connection_string {
@@ -4783,10 +4786,10 @@ impl AppState {
             });
         }
 
-        // OushuDB（偶数数据库）同样携带 jdbc: 连接串，纳入传输 URL 校验。
+        // OushuDB 已改为原生 PostgreSQL 协议，不再携带 jdbc: 连接串，无需 JDBC 传输 URL 校验。
         // @author xiaogui
-        // @since 2026-11-24 13:48:39
-        if config.db_type == DatabaseType::Jdbc || config.db_type == DatabaseType::Oushudb {
+        // @since 2026-11-25 12:51:10
+        if config.db_type == DatabaseType::Jdbc {
             if let Some(url) = config.connection_string.as_deref().filter(|url| !url.is_empty()) {
                 validate_jdbc_transport_url(url)?;
             }
@@ -8393,11 +8396,10 @@ fn connection_remote_endpoint(config: &ConnectionConfig) -> (String, u16) {
             .filter(|s| !s.is_empty())
             .and_then(parse_mongo_first_host)
             .unwrap_or_else(|| (config.host.clone(), config.port))
-    } else if config.db_type == DatabaseType::Jdbc || config.db_type == DatabaseType::Oushudb {
-        // OushuDB（偶数数据库）与通用 JDBC 均从 connection_string 解析远端端点，
-        // 保证 SSH 隧道/代理路由使用连接串里的真实主机与端口。
+    } else if config.db_type == DatabaseType::Jdbc {
+        // OushuDB 已改为原生 PostgreSQL 协议，走下方通用的 host/port 端点解析，不再从 JDBC 连接串取。
         // @author xiaogui
-        // @since 2026-11-24 13:48:39
+        // @since 2026-11-25 12:51:11
         config
             .connection_string
             .as_deref()

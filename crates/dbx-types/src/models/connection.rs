@@ -1173,6 +1173,10 @@ impl ConnectionConfig {
             DatabaseType::ClickHouse => Some("default"),
             DatabaseType::Rqlite | DatabaseType::Turso | DatabaseType::CloudflareD1 => Some("main"),
             DatabaseType::Gaussdb | DatabaseType::OpenGauss => Some("postgres"),
+            // OushuDB（偶数数据库）沿用 PostgreSQL 的维护库作为默认库。
+            // @author xiaogui
+            // @since 2026-11-25 12:49:57
+            DatabaseType::Oushudb => Some("postgres"),
             DatabaseType::Kwdb => Some("defaultdb"),
             // Keep saved Kingbase connections from before the database field became
             // required working after upgrade. New and edited desktop connections
@@ -1333,7 +1337,10 @@ impl ConnectionConfig {
                 let suffix = if params.is_empty() { String::new() } else { format!("?{params}") };
                 format!("mysql://{host}:{port}{db_part}{suffix}")
             }
-            DatabaseType::Postgres | DatabaseType::Redshift => {
+            // OushuDB（偶数数据库）走原生 PostgreSQL wire protocol，脱敏 URL 与 postgres 同构。
+            // @author xiaogui
+            // @since 2026-11-25 12:49:54
+            DatabaseType::Postgres | DatabaseType::Redshift | DatabaseType::Oushudb => {
                 let suffix = if params.is_empty() { String::new() } else { format!("?{params}") };
                 if is_multi_host(raw_host) {
                     format!("postgres://{raw_host}{db_part}{suffix}")
@@ -1468,10 +1475,6 @@ impl ConnectionConfig {
                 format!("{scheme}://{host}:{port}")
             }
             DatabaseType::Jdbc => "jdbc:<redacted>".to_string(),
-            // OushuDB（偶数数据库）脱敏 URL：与 JDBC 产品一致，避免连接串中的凭据外泄。
-            // @author xiaogui
-            // @since 2026-11-24 13:48:39
-            DatabaseType::Oushudb => "jdbc:<redacted>".to_string(),
             DatabaseType::Plugin => format!(
                 "plugin://{}/{}",
                 self.plugin_id.as_deref().unwrap_or("unknown"),
@@ -1516,7 +1519,10 @@ impl ConnectionConfig {
                 let suffix = if params.is_empty() { String::new() } else { format!("?{params}") };
                 format!("mysql://{}:{}@{host}:{port}{db_part}{suffix}", username, password)
             }
-            DatabaseType::Postgres | DatabaseType::Redshift => {
+            // OushuDB（偶数数据库）走原生 PostgreSQL wire protocol，完整 URL 与 postgres 同构。
+            // @author xiaogui
+            // @since 2026-11-25 12:49:55
+            DatabaseType::Postgres | DatabaseType::Redshift | DatabaseType::Oushudb => {
                 let suffix = if params.is_empty() { String::new() } else { format!("?{params}") };
                 if is_multi_host(raw_host) {
                     // Multi-host: host1:port1,host2:port2 — each host already has its port embedded
@@ -1767,12 +1773,6 @@ impl ConnectionConfig {
             DatabaseType::Jdbc => {
                 self.connection_string.as_deref().filter(|value| !value.is_empty()).unwrap_or("jdbc:").to_string()
             }
-            // OushuDB（偶数数据库）完整 URL：直接返回用户填写的厂商 JDBC 连接串。
-            // @author xiaogui
-            // @since 2026-11-24 13:48:39
-            DatabaseType::Oushudb => {
-                self.connection_string.as_deref().filter(|value| !value.is_empty()).unwrap_or("jdbc:oushudb:").to_string()
-            }
             DatabaseType::Plugin => format!(
                 "plugin://{}/{}",
                 self.plugin_id.as_deref().unwrap_or("unknown"),
@@ -1877,7 +1877,12 @@ impl ConnectionConfig {
                 self.normalized_bare_mysql_url_params(value)
             }
             DatabaseType::Databend => normalize_bare_mysql_url_params(value),
-            DatabaseType::Postgres | DatabaseType::Redshift => normalize_postgres_url_params(value, self.ssl),
+            // OushuDB 走原生 PG 协议，URL 参数按 PostgreSQL 规则归一化。
+            // @author xiaogui
+            // @since 2026-11-25 12:50:45
+            DatabaseType::Postgres | DatabaseType::Redshift | DatabaseType::Oushudb => {
+                normalize_postgres_url_params(value, self.ssl)
+            }
             DatabaseType::MongoDb => {
                 normalize_mongo_url_params(value, self.ssl, !self.username.trim().is_empty(), self.ca_cert_path.trim())
             }
@@ -1900,7 +1905,9 @@ impl ConnectionConfig {
 
     fn redacted_url_params(&self) -> String {
         let params = self.normalized_url_params();
-        if matches!(self.db_type, DatabaseType::Postgres | DatabaseType::Redshift) {
+        // @author xiaogui
+        // @since 2026-11-25 12:50:46
+        if matches!(self.db_type, DatabaseType::Postgres | DatabaseType::Redshift | DatabaseType::Oushudb) {
             redact_postgres_url_params(&params)
         } else {
             params
@@ -1908,7 +1915,9 @@ impl ConnectionConfig {
     }
 
     pub fn validate_native_url_params(&self) -> Result<(), String> {
-        if matches!(self.db_type, DatabaseType::Postgres | DatabaseType::Redshift) {
+        // @author xiaogui
+        // @since 2026-11-25 12:50:48
+        if matches!(self.db_type, DatabaseType::Postgres | DatabaseType::Redshift | DatabaseType::Oushudb) {
             validate_postgres_url_params(self.url_params.as_deref().unwrap_or(""))
         } else {
             Ok(())
