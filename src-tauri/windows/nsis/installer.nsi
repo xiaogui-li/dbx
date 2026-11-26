@@ -41,8 +41,8 @@ ${StrLoc}
 ; 自有构建的第 4 段构建号，必须与 crates/dbx-platform/src/version.rs 的
 ; SELF_BUILD_NUMBER 一致（由 scripts/check-self-build-version.mjs 校验）。
 ; @author xiaogui
-; @since 2026-11-25 20:14:15
-!define SELF_BUILD_NUMBER "6"
+; @since 2026-11-26 09:24:35
+!define SELF_BUILD_NUMBER "7"
 !define SELF_DISPLAY_VERSION "${VERSION}.${SELF_BUILD_NUMBER}"
 !define HOMEPAGE "{{homepage}}"
 !define INSTALLMODE "{{install_mode}}"
@@ -277,8 +277,15 @@ Function PageReinstall
   ${EndIf}
   ${IfThen} $R0 == "" ${|} StrCpy $R4 "$(unknown)" ${|}
 
-  nsis_tauri_utils::SemverCompare "${VERSION}" $R0
-  Pop $R0
+  ; 三段 SemverCompare 会忽略自建构建号（第 4 段），导致 0.6.72.5 → 0.6.72.6
+  ; 被误判为同版本重装。改用 NSIS 内置 VersionCompare 比较完整四段号；
+  ; 其返回的 2 表示"已装版本更新"，归一为原逻辑使用的 -1（降级）。
+  ; @author xiaogui
+  ; @since 2026-11-26 09:22:31
+  ${VersionCompare} "${SELF_DISPLAY_VERSION}" $R0 $R0
+  ${If} $R0 = 2
+    StrCpy $R0 -1
+  ${EndIf}
   ; Reinstalling the same version
   ${If} $R0 = 0
     StrCpy $R1 "$(alreadyInstalledLong)"
@@ -1047,7 +1054,10 @@ Section Install
   ; Registry information for add/remove programs
   WriteRegStr SHCTX "${UNINSTKEY}" "DisplayName" "${PRODUCTNAME}"
   WriteRegStr SHCTX "${UNINSTKEY}" "DisplayIcon" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\""
-  WriteRegStr SHCTX "${UNINSTKEY}" "DisplayVersion" "${VERSION}"
+  ; 写入含自建构建号的四段版本，供下次安装做同版本/升级/降级判断。
+  ; @author xiaogui
+  ; @since 2026-11-26 09:23:07
+  WriteRegStr SHCTX "${UNINSTKEY}" "DisplayVersion" "${SELF_DISPLAY_VERSION}"
   WriteRegStr SHCTX "${UNINSTKEY}" "Publisher" "${MANUFACTURER}"
   WriteRegStr SHCTX "${UNINSTKEY}" "InstallLocation" "$\"$INSTDIR$\""
   WriteRegStr SHCTX "${UNINSTKEY}" "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
