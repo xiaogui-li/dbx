@@ -6,7 +6,7 @@
  * 由 scripts/check-self-build-version.mjs 在测试阶段校验。
  *
  * @author xiaogui
- * @since 2026-11-26 09:24:22
+ * @since 2026-11-26 14:32:12
  */
 export const SELF_BUILD_NUMBER = 7;
 

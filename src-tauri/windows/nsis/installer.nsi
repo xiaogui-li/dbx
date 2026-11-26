@@ -27,6 +27,10 @@ ManifestDPIAwareness PerMonitorV2
 !include "StrFunc.nsh"
 ${StrCase}
 ${StrLoc}
+; 启用字符串替换宏，用于把安装向导提示语里的三段版本号换成四段自建版本号。
+; @author xiaogui
+; @since 2026-11-26 14:30:49
+${StrRep}
 
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
@@ -41,7 +45,7 @@ ${StrLoc}
 ; 自有构建的第 4 段构建号，必须与 crates/dbx-platform/src/version.rs 的
 ; SELF_BUILD_NUMBER 一致（由 scripts/check-self-build-version.mjs 校验）。
 ; @author xiaogui
-; @since 2026-11-26 09:24:35
+; @since 2026-11-26 14:32:20
 !define SELF_BUILD_NUMBER "7"
 !define SELF_DISPLAY_VERSION "${VERSION}.${SELF_BUILD_NUMBER}"
 !define HOMEPAGE "{{homepage}}"
@@ -288,19 +292,32 @@ Function PageReinstall
   ${EndIf}
   ; Reinstalling the same version
   ${If} $R0 = 0
-    StrCpy $R1 "$(alreadyInstalledLong)"
-    StrCpy $R2 "$(addOrReinstall)"
-    StrCpy $R3 "$(uninstallApp)"
-    !insertmacro MUI_HEADER_TEXT "$(alreadyInstalled)" "$(chooseMaintenanceOption)"
+  StrCpy $R1 "$(alreadyInstalledLong)"
+  ; Tauri 内置语言串内的 ${VERSION} 是编译期三段号，安装向导据此显示旧的三段版本；
+  ; 这里替换成四段自建版本号，与注册表 DisplayVersion 及更新检查保持一致。
+  ; @author xiaogui
+  ; @since 2026-11-26 14:31:07
+  ${StrRep} $R1 $R1 "${VERSION}" "${SELF_DISPLAY_VERSION}"
+  StrCpy $R2 "$(addOrReinstall)"
+  StrCpy $R3 "$(uninstallApp)"
+  !insertmacro MUI_HEADER_TEXT "$(alreadyInstalled)" "$(chooseMaintenanceOption)"
   ; Upgrading
   ${ElseIf} $R0 = 1
     StrCpy $R1 "$(olderOrUnknownVersionInstalled)"
+    ; 同版本分支的版本号替换：升级提示语若含 ${VERSION}，统一显示四段自建版本号。
+    ; @author xiaogui
+    ; @since 2026-11-26 14:31:23
+    ${StrRep} $R1 $R1 "${VERSION}" "${SELF_DISPLAY_VERSION}"
     StrCpy $R2 "$(uninstallBeforeInstalling)"
     StrCpy $R3 "$(dontUninstall)"
     !insertmacro MUI_HEADER_TEXT "$(alreadyInstalled)" "$(choowHowToInstall)"
   ; Downgrading
   ${ElseIf} $R0 = -1
     StrCpy $R1 "$(newerVersionInstalled)"
+    ; 同版本分支的版本号替换：降级提示语若含 ${VERSION}，统一显示四段自建版本号。
+    ; @author xiaogui
+    ; @since 2026-11-26 14:31:31
+    ${StrRep} $R1 $R1 "${VERSION}" "${SELF_DISPLAY_VERSION}"
     StrCpy $R2 "$(uninstallBeforeInstalling)"
     !if "${ALLOWDOWNGRADES}" == "true"
       StrCpy $R3 "$(dontUninstall)"
@@ -537,9 +554,12 @@ AllowSkipFiles off
 !define DBX_WRITE_CANCEL 2
 !define DBX_WRITE_RETRY 4
 !define DBX_WRITE_MANUAL 1001
-LangString dbxInstallDiagnostics ${LANG_ENGLISH} "Version: ${VERSION}$\r$\nDestination: $INSTDIR$\r$\nDiagnostic code: A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
-LangString dbxInstallDiagnostics ${LANG_SIMPCHINESE} "版本：${VERSION}$\r$\n安装目录：$INSTDIR$\r$\n诊断码：A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
-LangString dbxInstallDiagnostics ${LANG_TRADCHINESE} "版本：${VERSION}$\r$\n安裝目錄：$INSTDIR$\r$\n診斷碼：A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
+; 诊断串统一显示四段自建版本号，避免与安装向导/更新检查的版本号不一致。
+; @author xiaogui
+; @since 2026-11-26 14:31:44
+LangString dbxInstallDiagnostics ${LANG_ENGLISH} "Version: ${SELF_DISPLAY_VERSION}$\r$\nDestination: $INSTDIR$\r$\nDiagnostic code: A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
+LangString dbxInstallDiagnostics ${LANG_SIMPCHINESE} "版本：${SELF_DISPLAY_VERSION}$\r$\n安装目录：$INSTDIR$\r$\n诊断码：A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
+LangString dbxInstallDiagnostics ${LANG_TRADCHINESE} "版本：${SELF_DISPLAY_VERSION}$\r$\n安裝目錄：$INSTDIR$\r$\n診斷碼：A$DbxIsAdmin-E$DbxElevationCode-F$DbxFileProbeError-D$DbxDirectoryProbeError"
 LangString dbxFileWriteErrorNoIgnore ${LANG_ENGLISH} "Unable to write this file:$\r$\n$0$\r$\n$\r$\n$(dbxInstallDiagnostics)$\r$\n$\r$\nPlease run the installer as administrator."
 LangString dbxFileWriteErrorNoIgnore ${LANG_SIMPCHINESE} "无法写入文件：$\r$\n$0$\r$\n$\r$\n$(dbxInstallDiagnostics)$\r$\n$\r$\n请以管理员权限运行安装程序。"
 LangString dbxFileWriteErrorNoIgnore ${LANG_TRADCHINESE} "無法寫入檔案：$\r$\n$0$\r$\n$\r$\n$(dbxInstallDiagnostics)$\r$\n$\r$\n請以系統管理員權限執行安裝程式。"
