@@ -151,16 +151,13 @@ describe("AppToolbar update entry visibility", () => {
     expect(trigger?.textContent).toContain("Update");
   });
 
-  it("shows the idle check control when checkUpdates is on and no update is available", async () => {
+  it("hides the toolbar update control when checkUpdates is on but no update is available", async () => {
     const settingsStore = useSettingsStore();
     settingsStore.editorSettings.toolbarItems.checkUpdates = true;
 
     mounted = mount({ hasUpdateAvailable: false });
     await nextTick();
 
-    const trigger = mounted.host.querySelector("[data-toolbar-update-trigger]");
-    expect(trigger).not.toBeNull();
-    expect(trigger?.hasAttribute("data-toolbar-update-action")).toBe(false);
-    expect(mounted.host.querySelector("[data-toolbar-update-idle]")).not.toBeNull();
+    expect(mounted.host.querySelector("[data-toolbar-update-trigger]")).toBeNull();
   });
 });

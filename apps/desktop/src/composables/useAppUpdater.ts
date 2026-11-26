@@ -314,13 +314,28 @@ export function useAppUpdater(options: UseAppUpdaterOptions = {}) {
       /* Promotion lookup is best-effort; the channel check already succeeded. */
     }
   }
-  async function checkUpdates(checkOptions: { silent?: boolean } = {}) {
+  /**
+   * 检查 app 更新。silent 用于启动、定时与失败重试的后台检查；force 用于用户主动
+   * 触发的「立即检查更新」，强制绕过工具栏可见性与 phase 守卫重新发起网络请求，
+   * 避免拿启动时的旧快照敷衍用户。
+   *
+   * @author xiaogui
+   * @since 2026-11-26 11:01:05
+   */
+  async function checkUpdates(checkOptions: { silent?: boolean; force?: boolean } = {}) {
     if (updaterDisabled || disposed || isIgnoringUpdate.value) return;
-    if (checkOptions.silent && !updateEntryVisible.value) return;
+    if (!checkOptions.force && checkOptions.silent && !updateEntryVisible.value) return;
     if (!checkOptions.silent) showUpdateDialog.value = true;
     // A downloaded-but-uninstalled update keeps the app in the ready phase; checks
     // continue so a newer release can replace the cached package.
-    if (phase.value !== "idle" && phase.value !== "ready") return;
+    if (checkOptions.force && phase.value !== "idle" && phase.value !== "ready") {
+      // 强制检查时若状态机停在下载/准备/安装阶段，先取消并归位，保证本次请求能接管。
+      await cancelDownload();
+      downloaded.value = null;
+      updateInfo.value = null;
+      phase.value = "idle";
+    }
+    if (!checkOptions.force && phase.value !== "idle" && phase.value !== "ready") return;
     clearRetry();
     const token = ++generation;
     silentCheck = checkOptions.silent === true;
@@ -336,6 +351,12 @@ export function useAppUpdater(options: UseAppUpdaterOptions = {}) {
       const info = await api.checkForUpdates(currentLocale(), normalizeUpdateDownloadSource(settingsStore.editorSettings.updateDownloadSource), updateChannel.value);
       if (token !== generation || disposed) return;
       updateInfo.value = info;
+      // 远端版本已前进并超过被忽略的版本时，清掉过期标记，避免后台静默检查
+      // 检测到的新更新被历史 ignore 压住红点（被忽略的仍是旧版本才有意义）。
+      const ignoredVersion = settingsStore.editorSettings.ignoredUpdateVersion;
+      if (info.update_available && ignoredVersion && isNewerRemoteVersion(info.latest_version, ignoredVersion)) {
+        await settingsStore.updateEditorSettingsAndPersist({ ignoredUpdateVersion: "" });
+      }
       recordPromotedBuild(info);
       await recordPromotionFromStableChannel(info);
       if (token !== generation || disposed) return;

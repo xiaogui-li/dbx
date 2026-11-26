@@ -140,7 +140,15 @@ const orderedToolbarKeys = computed(() => ({
 }));
 watch(orderedToolbarKeys, resetToolbarMeasurement, { deep: true });
 const webLogoPosition = computed(() => settingsStore.editorSettings.webLogoPosition ?? "left");
-const showToolbarUpdateEntry = computed(() => toolbarItems.value.checkUpdates);
+/**
+ * 工具栏更新入口显示条件：开关开启且确实存在可用更新时才显示。
+ * 无更新时隐藏，避免空闲图标误导用户以为有更新；有更新时显示，
+ * 点击后由更新弹窗展示版本说明与下载按钮，下载仍由用户手动触发。
+ *
+ * @author xiaogui
+ * @since 2026-11-26 12:15:54
+ */
+const showToolbarUpdateEntry = computed(() => toolbarItems.value.checkUpdates && props.hasUpdateAvailable);
 const { isMac, isDesktop, showControls, isMaximized, isFullscreen, isAlwaysOnTop, minimize, toggleMaximize, toggleAlwaysOnTop, close } = useWindowControls();
 const workspaceWindowCaption = computed(() => {
   if (!isDesktop) return "";

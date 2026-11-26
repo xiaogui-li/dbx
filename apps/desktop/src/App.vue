@@ -1686,13 +1686,22 @@ function openPluginConnectionDialog(pluginId: string, providerId: string) {
   connectionPluginProvider.value = { pluginId, providerId };
   showConnectionDialog.value = true;
 }
+/**
+ * 用户主动触发的「立即检查更新」：强制重新拉取 app 更新清单并并行刷新组件更新。
+ *
+ * 必须走 force，否则静默检查会被 phase / 工具栏入口守卫挡掉，拿启动时的旧快照
+ * 冒充本检查结果，表现为「点了检查更新却提示已是最新版」。
+ *
+ * @author xiaogui
+ * @since 2026-11-26 11:01:24
+ */
 async function checkAllUpdates() {
   if (manualCheckingAllUpdates.value || componentUpdates.updating.value) return;
   manualCheckingAllUpdates.value = true;
   const startedAt = Date.now();
   try {
     // A user-triggered check must replace any in-flight background snapshot that may predate the update.
-    const [, componentRefresh] = await Promise.allSettled([checkUpdates({ silent: true }), componentUpdates.refresh({ force: true })]);
+    const [, componentRefresh] = await Promise.allSettled([checkUpdates({ silent: true, force: true }), componentUpdates.refresh({ force: true })]);
     if (componentRefresh.status === "fulfilled" && componentRefresh.value) syncToolbarComponentUpdateState();
     const remaining = 500 - (Date.now() - startedAt);
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));

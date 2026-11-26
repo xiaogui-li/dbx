@@ -1646,9 +1646,16 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
   generateSqlIncludeDatabaseName: false,
   generateSqlQuoteIdentifiers: true,
   formatSqlOnSqlFileSave: false,
+  /**
+   * 更新相关默认值：自动检查保持开启，自动下载默认关闭，只影响首次初始化，
+   * 已有配置由归一化逻辑保留用户的显式选择。
+   *
+   * @author xiaogui
+   * @since 2026-11-26 12:15:24
+   */
   updateNotificationsEnabled: true,
-  autoDownloadUpdates: true,
-  autoUpdateApp: true,
+  autoDownloadUpdates: false,
+  autoUpdateApp: false,
   autoUpdateDrivers: true,
   autoUpdateJdbc: true,
   autoUpdateMcp: true,
